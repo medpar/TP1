@@ -1,0 +1,27 @@
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.Trash-*
+.TemporaryItems
+.fseventsd
+.DocumentRevisions-V100
+.AppleDB
+.AppleDesktop
+.apdisk
+
+# Archive files
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
+*.tgz
+
+# Workspace and backup artifacts
+**/Project\ Backups/
+*.workspace

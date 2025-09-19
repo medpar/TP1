@@ -1,0 +1,5 @@
+16/09/25
+- [Añadido] Creación de grupos de trabajo.
+
+19/09/25
+- [Añadido] Creación del diagrama de Gantt.
