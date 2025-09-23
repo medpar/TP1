@@ -3,3 +3,7 @@
 
 19/09/25
 - [Añadido] Creación del diagrama de Gantt.
+
+23/09/25
+- [Actualizado] Diagrama de Gantt
+- [Actualizado] Diario de Trabajo
