@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-01" view-index="0" gantt-divider-location="459" resource-divider-location="300" version="3.3.3316" locale="es_ES">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-01" view-index="0" gantt-divider-location="444" resource-divider-location="300" version="3.3.3316" locale="es_ES">
     <description/>
     <view zooming-state="default:4" id="gantt-chart">
-        <field id="tpd3" name="Nombre" width="202" order="0"/>
-        <field id="tpd4" name="Fecha de inicio" width="143" order="1"/>
-        <field id="tpd5" name="Fecha de fin" width="98" order="2"/>
+        <field id="tpd3" name="Nombre" width="293" order="0"/>
+        <field id="tpd4" name="Fecha de inicio" width="40" order="1"/>
+        <field id="tpd5" name="Fecha de fin" width="95" order="2"/>
         <field id="tpd15" name="Notas" width="20" order="3"/>
         <option id="filter.completedTasks" value="false"/>
         <option id="filter.dueTodayTasks" value="false"/>
@@ -39,17 +39,17 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="104" complete="0" expand="true">
-            <task id="0" uid="4c25d368a8024af682a39ee9b22e0132" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="9" complete="75" priority="3" expand="true">
+        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="104" complete="1" expand="true">
+            <task id="0" uid="4c25d368a8024af682a39ee9b22e0132" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="9" complete="100" priority="3" expand="false">
                 <task id="2" uid="10b915e5e44b4af5a5b05bd1f1689892" name="Definción de objetivos" meeting="false" start="2025-09-15" duration="4" complete="100" expand="true"/>
-                <task id="3" uid="d7bc6f177a904a0e9e1e48b3e15eaffe" name="Estudio del sistema" meeting="false" start="2025-09-22" duration="4" complete="50" expand="true">
+                <task id="3" uid="d7bc6f177a904a0e9e1e48b3e15eaffe" name="Estudio del sistema" meeting="false" start="2025-09-22" duration="4" complete="100" expand="true">
                     <notes><![CDATA[hoja de especificaciones
 ]]></notes>
                 </task>
             </task>
             <task id="103" uid="3710295c6bfa46d5988ca53ab55ef6ae" name="ENTREGA 1 SEMANA" color="#cc00cc" meeting="true" start="2025-09-19" duration="0" complete="0" expand="true"/>
             <task id="104" uid="3586f38738254d688da47f2636dd7d67" name="ENTREGA 2 SEMANA" color="#cc00cc" meeting="true" start="2025-09-26" duration="0" complete="0" expand="true"/>
-            <task id="1" uid="71592619296c4a3ea36ec1b31ed657b5" name="PCB0: Diseño electronico y captura esquematica PCB0" color="#009933" meeting="false" start="2025-09-29" duration="14" complete="0" expand="false">
+            <task id="1" uid="71592619296c4a3ea36ec1b31ed657b5" name="PCB0: Diseño electronico y captura esquematica PCB0" color="#009933" meeting="false" start="2025-09-29" duration="14" complete="0" expand="true">
                 <task id="4" uid="7387d7d94d934c05bb15f53af3451fa4" name="Busqueda de componentes" meeting="false" start="2025-09-29" duration="1" complete="0" expand="true">
                     <notes><![CDATA[listado de los componentes
 ]]></notes>
@@ -250,21 +250,25 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
         <allocation task-id="111" resource-id="0" function="1" responsible="true" load="100.0"/>
         <allocation task-id="115" resource-id="0" function="1" responsible="true" load="100.0"/>
         <allocation task-id="119" resource-id="0" function="1" responsible="true" load="100.0"/>
+        <allocation task-id="138" resource-id="0" function="1" responsible="false" load="100.0"/>
         <allocation task-id="104" resource-id="1" function="1" responsible="true" load="100.0"/>
         <allocation task-id="108" resource-id="1" function="1" responsible="true" load="100.0"/>
         <allocation task-id="112" resource-id="1" function="1" responsible="true" load="100.0"/>
         <allocation task-id="116" resource-id="1" function="1" responsible="true" load="100.0"/>
         <allocation task-id="119" resource-id="1" function="1" responsible="true" load="100.0"/>
+        <allocation task-id="1" resource-id="1" function="1" responsible="false" load="100.0"/>
         <allocation task-id="105" resource-id="2" function="1" responsible="true" load="100.0"/>
         <allocation task-id="109" resource-id="2" function="1" responsible="true" load="100.0"/>
         <allocation task-id="113" resource-id="2" function="1" responsible="true" load="100.0"/>
         <allocation task-id="117" resource-id="2" function="1" responsible="true" load="100.0"/>
         <allocation task-id="119" resource-id="2" function="1" responsible="true" load="100.0"/>
+        <allocation task-id="129" resource-id="2" function="1" responsible="false" load="100.0"/>
         <allocation task-id="106" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="110" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="114" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="118" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="119" resource-id="3" function="1" responsible="true" load="100.0"/>
+        <allocation task-id="120" resource-id="3" function="1" responsible="false" load="100.0"/>
     </allocations>
     <vacations/>
     <previous/>
