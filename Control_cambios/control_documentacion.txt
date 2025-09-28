@@ -1,0 +1,8 @@
+19/09/25
+- [Añadido] Plan de Trabajo 
+- [Añadido] Diagrama de Gantt
+- [Añadido] Control de cambios
+26/09/25
+- [Actualizado] Plan de Trabajo 
+- [Actualizado] Diagrama de Gantt
+- [Añadido] Proyecto de Proteus 
