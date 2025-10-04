@@ -5,4 +5,11 @@
 26/09/25
 - [Actualizado] Plan de Trabajo 
 - [Actualizado] Diagrama de Gantt
-- [Añadido] Proyecto de Proteus 
+- [Actualizado] Control de cambios
+03/10/25
+-[Actualizado] Plan de Trabajo
+-[Actualizado] Diagrama de Gantt
+-[Añadido] Documento final
+-[Actualizado] Control de cambios
+-[Añadido] Esquemáticos 
+-[Añadido] BOM 0 y 3
