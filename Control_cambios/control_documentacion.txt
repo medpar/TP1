@@ -12,4 +12,4 @@
 -[Añadido] Documento final
 -[Actualizado] Control de cambios
 -[Añadido] Esquemáticos 
--[Añadido] BOM 0 y 3
+-[Añadido] BOM 0,1 y 3
