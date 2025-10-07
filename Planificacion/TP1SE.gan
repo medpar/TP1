@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-08-25" view-index="0" gantt-divider-location="375" resource-divider-location="300" version="3.3.3316" locale="es_ES">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-08-25" view-index="0" gantt-divider-location="347" resource-divider-location="300" version="3.3.3316" locale="es_ES">
     <description/>
     <view zooming-state="default:4" id="gantt-chart">
-        <field id="tpd3" name="Nombre" width="244" order="0"/>
-        <field id="tpd4" name="Fecha de inicio" width="34" order="1"/>
-        <field id="tpd5" name="Fecha de fin" width="81" order="2"/>
+        <field id="tpd3" name="Nombre" width="224" order="0"/>
+        <field id="tpd4" name="Fecha de inicio" width="32" order="1"/>
+        <field id="tpd5" name="Fecha de fin" width="75" order="2"/>
         <field id="tpd15" name="Notas" width="20" order="3"/>
         <option id="taskLabelUp" value="advancement"/>
         <option id="taskLabelLeft" value="name"/>
@@ -15,8 +15,8 @@
         <option id="color.recent"><![CDATA[#cccc00 #000099 #ff0000 #cc00cc #009933 #00ffff #ffff00 #00ff00]]></option>
     </view>
     <view id="resource-table">
-        <field id="0" name="Nombre" width="199" order="0"/>
-        <field id="1" name="Función" width="82" order="1"/>
+        <field id="0" name="Nombre" width="206" order="0"/>
+        <field id="1" name="Función" width="90" order="1"/>
     </view>
     <!-- -->
     <calendars>
@@ -42,7 +42,7 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="104" complete="8" expand="true">
+        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="104" complete="11" expand="true">
             <task id="0" uid="4c25d368a8024af682a39ee9b22e0132" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="8" complete="100" priority="3" expand="true">
                 <depend id="1" type="2" difference="0" hardness="Strong"/>
                 <depend id="120" type="2" difference="0" hardness="Strong"/>
@@ -58,7 +58,7 @@
             </task>
             <task id="103" uid="3710295c6bfa46d5988ca53ab55ef6ae" name="ENTREGA 1 SEMANA" color="#cc00cc" meeting="true" start="2025-09-19" duration="0" complete="100" expand="true"/>
             <task id="104" uid="3586f38738254d688da47f2636dd7d67" name="ENTREGA 2 SEMANA" color="#cc00cc" meeting="true" start="2025-09-26" duration="0" complete="100" expand="true"/>
-            <task id="1" uid="71592619296c4a3ea36ec1b31ed657b5" name="PCB0: Diseño electronico y captura esquematica PCB0" color="#009933" meeting="false" start="2025-09-29" duration="14" complete="41" expand="true">
+            <task id="1" uid="71592619296c4a3ea36ec1b31ed657b5" name="PCB0: Diseño electronico y captura esquematica PCB0" color="#009933" meeting="false" start="2025-09-29" duration="14" complete="44" expand="false">
                 <depend id="41" type="2" difference="0" hardness="Strong"/>
                 <task id="4" uid="7387d7d94d934c05bb15f53af3451fa4" name="Busqueda de componentes" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
@@ -83,7 +83,7 @@
                     <depend id="11" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="11" uid="087709ff50914fb8806bf99cded4a921" name="Rutado de conexiones" meeting="false" start="2025-10-10" duration="4" complete="0" expand="true"/>
-                <task id="12" uid="fd52d41257e6493ab8f7ba539e877203" name="Generación de listado de materiales (BOM)" meeting="false" start="2025-09-30" duration="13" complete="90" expand="true">
+                <task id="12" uid="fd52d41257e6493ab8f7ba539e877203" name="Generación de listado de materiales (BOM)" meeting="false" start="2025-09-30" duration="13" complete="100" expand="true">
                     <notes><![CDATA[con su presupuesto, por su unidad y el coste de diseño (horas dedicadas)]]></notes>
                 </task>
                 <task id="7" uid="cd215a7d022a4d46b3b65f4816c49ead" name="Documentación esquemático. Control de cambios" meeting="false" start="2025-09-29" duration="14" complete="10" expand="true">
@@ -92,7 +92,7 @@
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="120" uid="64a7c0247ea749eda7e02a82f409806f" name="PCB1:Diseño electrónico y captura esquemática" color="#ff0000" meeting="false" start="2025-09-29" duration="14" complete="15" expand="false">
+            <task id="120" uid="64a7c0247ea749eda7e02a82f409806f" name="PCB1:Diseño electrónico y captura esquemática" color="#ff0000" meeting="false" start="2025-09-29" duration="14" complete="44" expand="false">
                 <depend id="177" type="2" difference="0" hardness="Strong"/>
                 <task id="121" uid="351da6b14db74e1c93daa5ed071c620b" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
@@ -117,7 +117,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="126" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="126" uid="82a938391cc64f6bba20151c351ed981" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-10" duration="4" complete="0" expand="true"/>
-                <task id="127" uid="07fb007f31d54f2fa8e7b4884e09ce33" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="0" expand="true">
+                <task id="127" uid="07fb007f31d54f2fa8e7b4884e09ce33" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="100" expand="true">
                     <notes><![CDATA[con su presupuesto, por su unidad y el coste de diseño (horas dedicadas)]]></notes>
                 </task>
                 <task id="128" uid="ce90b2e9604a45919a7057a93000b91d" name="Documentación esquemático. Control de cambios" color="#8cb6ce" meeting="false" start="2025-09-29" duration="14" complete="10" expand="true">
@@ -126,7 +126,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="129" uid="c497cc5aecc84e1fba77cd17890c56c4" name="PCB2 :Diseño electrónico y captura esquemática" color="#000099" meeting="false" start="2025-09-29" duration="14" complete="15" expand="false">
+            <task id="129" uid="c497cc5aecc84e1fba77cd17890c56c4" name="PCB2 :Diseño electrónico y captura esquemática" color="#000099" meeting="false" start="2025-09-29" duration="14" complete="33" expand="true">
                 <depend id="187" type="2" difference="0" hardness="Strong"/>
                 <task id="130" uid="ee7b5e1e1ae54202a0ecad8e88e110dc" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
@@ -151,7 +151,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="135" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="135" uid="8e3019e0b5be47a0a396991980124d3b" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-10" duration="4" complete="0" expand="true"/>
-                <task id="136" uid="149723e5b8cb407cb606d4dacb284584" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="0" expand="true">
+                <task id="136" uid="149723e5b8cb407cb606d4dacb284584" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="60" expand="true">
                     <notes><![CDATA[con su presupuesto, por su unidad y el coste de diseño (horas dedicadas)]]></notes>
                 </task>
                 <task id="137" uid="e92ab4d810e94d57b2443aedf3f6ddbe" name="Documentación esquemático. Control de cambios" color="#8cb6ce" meeting="false" start="2025-09-29" duration="14" complete="10" expand="true">
@@ -160,7 +160,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="138" uid="9c41bff903b244c18deed7ca9a9b1f29" name="PCB3:Diseño electrónico y captura esquemática" color="#cccc00" meeting="false" start="2025-09-29" duration="14" complete="38" expand="false">
+            <task id="138" uid="9c41bff903b244c18deed7ca9a9b1f29" name="PCB3:Diseño electrónico y captura esquemática" color="#cccc00" meeting="false" start="2025-09-29" duration="14" complete="44" expand="false">
                 <depend id="197" type="2" difference="0" hardness="Strong"/>
                 <task id="139" uid="325edba6a53d42128ce19b671c67fa1e" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
@@ -185,7 +185,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="144" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="144" uid="224078601d62497eb7d82c4fccf03495" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-10" duration="4" complete="0" expand="true"/>
-                <task id="145" uid="55084311cc7a4d9b886bf70474285d99" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="80" expand="true">
+                <task id="145" uid="55084311cc7a4d9b886bf70474285d99" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="100" expand="true">
                     <notes><![CDATA[con su presupuesto, por su unidad y el coste de diseño (horas dedicadas)]]></notes>
                 </task>
                 <task id="146" uid="86ccf944848e460db68b8e206e0e9adb" name="Documentación esquemático. Control de cambios" color="#8cb6ce" meeting="false" start="2025-09-29" duration="14" complete="10" expand="true">
