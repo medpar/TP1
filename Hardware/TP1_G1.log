@@ -1,0 +1,7 @@
+# Writing all output to: C:\Users\Invitado(pass user)\Documents\TP1\Hardware\TP1_G1.log
+set pad_wire_necking on
+bus diagonal
+fanout 5
+route 50
+clean 2
+route 50 16
