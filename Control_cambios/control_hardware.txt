@@ -3,4 +3,8 @@
 03/09/25
 -[Añadido] Esquemáticos finalizados
 -[Añadido] PCBs 0 y 3
+10/10/25
+-[Actualizado] Esquemático 3 por cambio de la antena
+-[Añadido] PCBs 1 y 2
+
 

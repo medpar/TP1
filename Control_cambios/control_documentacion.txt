@@ -13,3 +13,10 @@
 -[Actualizado] Control de cambios
 -[Añadido] Esquemáticos 
 -[Añadido] BOM 0,1 y 3
+10/10/25
+-[Actualizado] Plan de Trabajo
+-[Actualizado] Diagrama de Gantt en formato emf
+-[Añadido] Diagrama de Pert
+-[Actualizado] Documento final con diagramas gantt, pert y BOM 2
+-[Actualizado] Esquemático 3 por cambio de antena
+-[Actualizado] Control de cambios

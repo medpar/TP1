@@ -10,6 +10,9 @@
 -[Actualizado] Diagrama de Gantt
 03/10/25
 -[Actualizado] Diagrama de Gantt
+10/10/25
+-[Actualizado] Diagrama de Gantt
+-[Actualizado] Diagrama de Pert
 
 
 
