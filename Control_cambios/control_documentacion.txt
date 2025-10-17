@@ -20,3 +20,7 @@
 -[Actualizado] Documento final con diagramas gantt, pert y BOM 2
 -[Actualizado] Esquemático 3 por cambio de antena
 -[Actualizado] Control de cambios
+17/10/25
+-[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final con diagramas BOM 0 y 1 
+-[Actualizado] Esquemático 0, 1, 2, 3 por corrección profesor

@@ -13,6 +13,7 @@
 10/10/25
 -[Actualizado] Diagrama de Gantt
 -[Actualizado] Diagrama de Pert
-
-
+17/10/25
+-[Actualizado] Diagrama de Gantt
+-[Actualizado] Diario de trabajo 
 
