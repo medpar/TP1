@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-15" view-index="0" gantt-divider-location="290" resource-divider-location="300" version="3.3.3316" locale="es_ES">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-29" view-index="0" gantt-divider-location="197" resource-divider-location="300" version="3.3.3316" locale="es_ES">
     <description/>
     <view zooming-state="default:4" id="gantt-chart">
-        <field id="tpd3" name="Nombre" width="184" order="0"/>
-        <field id="tpd4" name="Fecha de inicio" width="27" order="1"/>
-        <field id="tpd5" name="Fecha de fin" width="63" order="2"/>
+        <field id="tpd3" name="Nombre" width="61" order="0"/>
+        <field id="tpd4" name="Fecha de inicio" width="78" order="1"/>
+        <field id="tpd5" name="Fecha de fin" width="42" order="2"/>
         <field id="tpd15" name="Notas" width="20" order="3"/>
         <option id="taskLabelUp" value="advancement"/>
         <option id="taskLabelLeft" value="name"/>
@@ -42,7 +42,7 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="16" expand="true">
+        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="24" expand="true">
             <task id="0" uid="4c25d368a8024af682a39ee9b22e0132" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="8" complete="100" priority="3" expand="true">
                 <depend id="102" type="1" difference="0" hardness="Strong"/>
                 <task id="2" uid="10b915e5e44b4af5a5b05bd1f1689892" name="Definción de objetivos" meeting="false" start="2025-09-15" duration="4" complete="100" expand="true">
@@ -206,16 +206,16 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
             <task id="105" uid="6d670ac7cee14ec59b5339c5db9e5047" name="ENTREGA 3 SEMANA" color="#cc00cc" meeting="true" start="2025-10-03" duration="0" complete="100" expand="true"/>
             <task id="106" uid="222c8b616fec4003a6b62dfdb92b0772" name="ENTREGA 4 SEMANA" color="#cc00cc" meeting="true" start="2025-10-10" duration="0" complete="100" expand="true"/>
             <task id="107" uid="dafcdf01b3bd40d1a8c871572a9bb570" name="ENTREGA 5 SEMANA" color="#cc00cc" meeting="true" start="2025-10-17" duration="0" complete="100" expand="true"/>
-            <task id="41" uid="47abb0f946d64c62b31a83e61503d42d" name="PCB0: Diseño de la placa de circuito impreso" color="#009933" meeting="false" start="2025-10-17" duration="16" complete="0" expand="false">
-                <task id="42" uid="7740408e738146db8bc99e1030fc743b" name="Creación de huellas de nuevos componentes" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+            <task id="41" uid="47abb0f946d64c62b31a83e61503d42d" name="PCB0: Diseño de la placa de circuito impreso" color="#009933" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+                <task id="42" uid="7740408e738146db8bc99e1030fc743b" name="Creación de huellas de nuevos componentes" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="43" type="1" difference="0" hardness="Strong"/>
                     <depend id="44" type="1" difference="0" hardness="Strong"/>
                     <depend id="48" type="1" difference="0" hardness="Strong"/>
                 </task>
-                <task id="43" uid="97768710faa14d50af56cce0aab968ca" name="Posicionado de componentes" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="43" uid="97768710faa14d50af56cce0aab968ca" name="Posicionado de componentes" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="49" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="44" uid="683d2df1e8224a66b7957815ed676f78" name="Definición de borde y zonas de conectores" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="44" uid="683d2df1e8224a66b7957815ed676f78" name="Definición de borde y zonas de conectores" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="45" type="2" difference="0" hardness="Strong"/>
                     <depend id="46" type="2" difference="0" hardness="Strong"/>
                     <depend id="47" type="2" difference="0" hardness="Strong"/>
@@ -235,16 +235,16 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
                 <task id="48" uid="24ec5015225c4824b169e2d746ff6e39" name="Documentación: serigrafía. Control de cambios" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="177" uid="e438e10f31c94fb5acf8e1ceafd65dba" name="PCB1:Diseño de la placa de circuito impreso" color="#ff0000" meeting="false" start="2025-10-17" duration="16" complete="0" expand="false">
-                <task id="178" uid="40f69fc46d78455d89d666c483e31a50" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+            <task id="177" uid="e438e10f31c94fb5acf8e1ceafd65dba" name="PCB1:Diseño de la placa de circuito impreso" color="#ff0000" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+                <task id="178" uid="40f69fc46d78455d89d666c483e31a50" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="179" type="1" difference="0" hardness="Strong"/>
                     <depend id="180" type="1" difference="0" hardness="Strong"/>
                     <depend id="186" type="1" difference="0" hardness="Strong"/>
                 </task>
-                <task id="179" uid="e67dc86024f24da195cb5e79364d9b09" name="Posicionado de componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="179" uid="e67dc86024f24da195cb5e79364d9b09" name="Posicionado de componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="181" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="180" uid="9c36bb4dab964ce9ab44c361b68473c7" name="Definición de borde y zonas de conectores" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="180" uid="9c36bb4dab964ce9ab44c361b68473c7" name="Definición de borde y zonas de conectores" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="181" type="2" difference="0" hardness="Strong"/>
                     <depend id="182" type="2" difference="0" hardness="Strong"/>
                     <depend id="183" type="2" difference="0" hardness="Strong"/>
@@ -264,16 +264,16 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
                 <task id="186" uid="2d278117c2a9492eb8b58537ac7daff8" name="Documentación: serigrafía. Control de cambios" color="#8cb6ce" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="187" uid="17057df35a324894876118798dd7885b" name="PCB2: Diseño de la placa de circuito impreso" color="#000099" meeting="false" start="2025-10-17" duration="16" complete="0" expand="false">
-                <task id="188" uid="b2585b3a78f74afe98909217c94e2d32" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+            <task id="187" uid="17057df35a324894876118798dd7885b" name="PCB2: Diseño de la placa de circuito impreso" color="#000099" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+                <task id="188" uid="b2585b3a78f74afe98909217c94e2d32" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="189" type="1" difference="0" hardness="Strong"/>
                     <depend id="190" type="1" difference="0" hardness="Strong"/>
                     <depend id="196" type="1" difference="0" hardness="Strong"/>
                 </task>
-                <task id="189" uid="8ffca50535894773a3e33829a87cf64c" name="Posicionado de componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="189" uid="8ffca50535894773a3e33829a87cf64c" name="Posicionado de componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="191" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="190" uid="cb1bfae1e2fd4a4080e6c25deaef1836" name="Definición de borde y zonas de conectores" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="190" uid="cb1bfae1e2fd4a4080e6c25deaef1836" name="Definición de borde y zonas de conectores" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="191" type="2" difference="0" hardness="Strong"/>
                     <depend id="192" type="2" difference="0" hardness="Strong"/>
                     <depend id="193" type="2" difference="0" hardness="Strong"/>
@@ -293,16 +293,16 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
                 <task id="196" uid="496f555b0688418591179b33180fa314" name="Documentación: serigrafía. Control de cambios" color="#8cb6ce" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="197" uid="17e5ce9845334b6ebfeed5a27f0adb1a" name="PCB3: Diseño de la placa de circuito impreso" color="#cccc00" meeting="false" start="2025-10-17" duration="16" complete="0" expand="false">
-                <task id="198" uid="9821f4e520ab4dc09c2157dc2075b0d6" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+            <task id="197" uid="17e5ce9845334b6ebfeed5a27f0adb1a" name="PCB3: Diseño de la placa de circuito impreso" color="#cccc00" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+                <task id="198" uid="9821f4e520ab4dc09c2157dc2075b0d6" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="199" type="1" difference="0" hardness="Strong"/>
                     <depend id="200" type="1" difference="0" hardness="Strong"/>
                     <depend id="206" type="1" difference="0" hardness="Strong"/>
                 </task>
-                <task id="199" uid="6b0d964fd27246f8989d883dc6211c5c" name="Posicionado de componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="199" uid="6b0d964fd27246f8989d883dc6211c5c" name="Posicionado de componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="201" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="200" uid="d7fa144286d34ff292308465ce35beb2" name="Definición de borde y zonas de conectores" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
+                <task id="200" uid="d7fa144286d34ff292308465ce35beb2" name="Definición de borde y zonas de conectores" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="201" type="2" difference="0" hardness="Strong"/>
                     <depend id="202" type="2" difference="0" hardness="Strong"/>
                     <depend id="203" type="2" difference="0" hardness="Strong"/>
@@ -360,7 +360,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 <task id="92" uid="ca3616d88ecd49028ae6d7897ad86619" name="Programa principal. Especificaciones" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
                 <task id="93" uid="1399a1f1cd024cd0a322bfdf811abba1" name="Documentación firmware. Control de cambios" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
             </task>
-            <task id="94" uid="f562f5714cb4433597a51b2eacc51d94" name="Verificación hardware" meeting="false" start="2025-12-12" duration="40" complete="0" expand="false">
+            <task id="94" uid="f562f5714cb4433597a51b2eacc51d94" name="Verificación hardware" meeting="false" start="2025-12-12" duration="40" complete="0" expand="true">
                 <task id="95" uid="4c3eba7a1c5f487b8b045d3c3a29fb7b" name="Verificación inicial" meeting="false" start="2025-12-12" duration="20" complete="0" expand="true">
                     <depend id="96" type="1" difference="0" hardness="Strong"/>
                     <depend id="97" type="1" difference="0" hardness="Strong"/>
