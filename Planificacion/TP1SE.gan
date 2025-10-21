@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-15" view-index="0" gantt-divider-location="305" resource-divider-location="300" version="3.3.3316" locale="es_ES">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-15" view-index="0" gantt-divider-location="290" resource-divider-location="300" version="3.3.3316" locale="es_ES">
     <description/>
     <view zooming-state="default:4" id="gantt-chart">
-        <field id="tpd3" name="Nombre" width="194" order="0"/>
-        <field id="tpd4" name="Fecha de inicio" width="29" order="1"/>
-        <field id="tpd5" name="Fecha de fin" width="66" order="2"/>
+        <field id="tpd3" name="Nombre" width="184" order="0"/>
+        <field id="tpd4" name="Fecha de inicio" width="27" order="1"/>
+        <field id="tpd5" name="Fecha de fin" width="63" order="2"/>
         <field id="tpd15" name="Notas" width="20" order="3"/>
         <option id="taskLabelUp" value="advancement"/>
         <option id="taskLabelLeft" value="name"/>
@@ -42,7 +42,7 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="15" expand="true">
+        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="16" expand="true">
             <task id="0" uid="4c25d368a8024af682a39ee9b22e0132" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="8" complete="100" priority="3" expand="true">
                 <depend id="102" type="1" difference="0" hardness="Strong"/>
                 <task id="2" uid="10b915e5e44b4af5a5b05bd1f1689892" name="Definción de objetivos" meeting="false" start="2025-09-15" duration="4" complete="100" expand="true">
@@ -59,7 +59,7 @@
             </task>
             <task id="103" uid="3710295c6bfa46d5988ca53ab55ef6ae" name="ENTREGA 1 SEMANA" color="#cc00cc" meeting="true" start="2025-09-19" duration="0" complete="100" expand="true"/>
             <task id="104" uid="3586f38738254d688da47f2636dd7d67" name="ENTREGA 2 SEMANA" color="#cc00cc" meeting="true" start="2025-09-25" duration="0" complete="100" expand="true"/>
-            <task id="1" uid="71592619296c4a3ea36ec1b31ed657b5" name="PCB0: Diseño electronico y captura esquematica PCB0" color="#009933" meeting="false" start="2025-09-29" duration="14" complete="68" expand="false">
+            <task id="1" uid="71592619296c4a3ea36ec1b31ed657b5" name="PCB0: Diseño electronico y captura esquematica PCB0" color="#009933" meeting="false" start="2025-09-29" duration="14" complete="72" expand="false">
                 <task id="4" uid="7387d7d94d934c05bb15f53af3451fa4" name="Busqueda de componentes" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
 ]]></notes>
@@ -77,7 +77,7 @@
                     <notes><![CDATA[colocación en proteus
 ]]></notes>
                 </task>
-                <task id="9" uid="38a46cb7d65540969f23b82600988812" name="Análisis consumo eléctrico" meeting="false" start="2025-09-30" duration="4" complete="50" expand="true">
+                <task id="9" uid="38a46cb7d65540969f23b82600988812" name="Análisis consumo eléctrico" meeting="false" start="2025-09-30" duration="4" complete="100" expand="true">
                     <depend id="10" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="10" uid="f50d3b92a018408697c6ba906826c93e" name="Análisis disipación de potencia" meeting="false" start="2025-10-06" duration="4" complete="0" expand="true">
@@ -95,7 +95,7 @@
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="120" uid="64a7c0247ea749eda7e02a82f409806f" name="PCB1:Diseño electrónico y captura esquemática" color="#ff0000" meeting="false" start="2025-09-29" duration="14" complete="56" expand="false">
+            <task id="120" uid="64a7c0247ea749eda7e02a82f409806f" name="PCB1:Diseño electrónico y captura esquemática" color="#ff0000" meeting="false" start="2025-09-29" duration="14" complete="63" expand="false">
                 <task id="121" uid="351da6b14db74e1c93daa5ed071c620b" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
 ]]></notes>
@@ -113,7 +113,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <notes><![CDATA[colocación en proteus
 ]]></notes>
                 </task>
-                <task id="124" uid="5e84e937e4834d1dad1955ee86ebc5d5" name="Análisis consumo eléctrico" color="#8cb6ce" meeting="false" start="2025-09-30" duration="4" complete="30" expand="true">
+                <task id="124" uid="5e84e937e4834d1dad1955ee86ebc5d5" name="Análisis consumo eléctrico" color="#8cb6ce" meeting="false" start="2025-09-30" duration="4" complete="100" expand="true">
                     <depend id="125" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="125" uid="247542d7f3304ee2869067b0a6bea514" name="Análisis disipación de potencia" color="#8cb6ce" meeting="false" start="2025-10-06" duration="4" complete="0" expand="true">
@@ -167,7 +167,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="138" uid="9c41bff903b244c18deed7ca9a9b1f29" name="PCB3:Diseño electrónico y captura esquemática" color="#cccc00" meeting="false" start="2025-09-29" duration="14" complete="54" expand="true">
+            <task id="138" uid="9c41bff903b244c18deed7ca9a9b1f29" name="PCB3:Diseño electrónico y captura esquemática" color="#cccc00" meeting="false" start="2025-09-29" duration="14" complete="63" expand="false">
                 <task id="139" uid="325edba6a53d42128ce19b671c67fa1e" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
 ]]></notes>
@@ -185,7 +185,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <notes><![CDATA[colocación en proteus
 ]]></notes>
                 </task>
-                <task id="142" uid="669dfcb3f3a14ff085a22779224cc342" name="Análisis consumo eléctrico" color="#8cb6ce" meeting="false" start="2025-09-30" duration="4" complete="0" expand="true">
+                <task id="142" uid="669dfcb3f3a14ff085a22779224cc342" name="Análisis consumo eléctrico" color="#8cb6ce" meeting="false" start="2025-09-30" duration="4" complete="100" expand="true">
                     <depend id="143" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="143" uid="0ef1166ea80b402f8faf67cfcba9ae1d" name="Análisis disipación de potencia" color="#8cb6ce" meeting="false" start="2025-10-06" duration="4" complete="0" expand="true">
@@ -205,7 +205,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
             </task>
             <task id="105" uid="6d670ac7cee14ec59b5339c5db9e5047" name="ENTREGA 3 SEMANA" color="#cc00cc" meeting="true" start="2025-10-03" duration="0" complete="100" expand="true"/>
             <task id="106" uid="222c8b616fec4003a6b62dfdb92b0772" name="ENTREGA 4 SEMANA" color="#cc00cc" meeting="true" start="2025-10-10" duration="0" complete="100" expand="true"/>
-            <task id="107" uid="dafcdf01b3bd40d1a8c871572a9bb570" name="ENTREGA 5 SEMANA" color="#cc00cc" meeting="true" start="2025-10-17" duration="0" complete="0" expand="true"/>
+            <task id="107" uid="dafcdf01b3bd40d1a8c871572a9bb570" name="ENTREGA 5 SEMANA" color="#cc00cc" meeting="true" start="2025-10-17" duration="0" complete="100" expand="true"/>
             <task id="41" uid="47abb0f946d64c62b31a83e61503d42d" name="PCB0: Diseño de la placa de circuito impreso" color="#009933" meeting="false" start="2025-10-17" duration="16" complete="0" expand="false">
                 <task id="42" uid="7740408e738146db8bc99e1030fc743b" name="Creación de huellas de nuevos componentes" meeting="false" start="2025-10-17" duration="5" complete="0" expand="true">
                     <depend id="43" type="1" difference="0" hardness="Strong"/>
