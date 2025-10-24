@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-29" view-index="0" gantt-divider-location="197" resource-divider-location="300" version="3.3.3316" locale="es_ES">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-09-15" view-index="0" gantt-divider-location="305" resource-divider-location="300" version="3.3.3316" locale="es_ES">
     <description/>
     <view zooming-state="default:4" id="gantt-chart">
-        <field id="tpd3" name="Nombre" width="61" order="0"/>
-        <field id="tpd4" name="Fecha de inicio" width="78" order="1"/>
-        <field id="tpd5" name="Fecha de fin" width="42" order="2"/>
+        <field id="tpd3" name="Nombre" width="97" order="0"/>
+        <field id="tpd4" name="Fecha de inicio" width="125" order="1"/>
+        <field id="tpd5" name="Fecha de fin" width="67" order="2"/>
         <field id="tpd15" name="Notas" width="20" order="3"/>
         <option id="taskLabelUp" value="advancement"/>
         <option id="taskLabelLeft" value="name"/>
@@ -42,7 +42,7 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="24" expand="true">
+        <task id="22" uid="e5237500684a4357aa8bb4494c09cb94" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="39" expand="true">
             <task id="0" uid="4c25d368a8024af682a39ee9b22e0132" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="8" complete="100" priority="3" expand="true">
                 <depend id="102" type="1" difference="0" hardness="Strong"/>
                 <task id="2" uid="10b915e5e44b4af5a5b05bd1f1689892" name="Definción de objetivos" meeting="false" start="2025-09-15" duration="4" complete="100" expand="true">
@@ -131,7 +131,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="129" uid="c497cc5aecc84e1fba77cd17890c56c4" name="PCB2 :Diseño electrónico y captura esquemática" color="#000099" meeting="false" start="2025-09-29" duration="14" complete="42" expand="false">
+            <task id="129" uid="c497cc5aecc84e1fba77cd17890c56c4" name="PCB2 :Diseño electrónico y captura esquemática" color="#000099" meeting="false" start="2025-09-29" duration="14" complete="63" expand="false">
                 <task id="130" uid="ee7b5e1e1ae54202a0ecad8e88e110dc" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
 ]]></notes>
@@ -149,7 +149,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <notes><![CDATA[colocación en proteus
 ]]></notes>
                 </task>
-                <task id="133" uid="f40fc430744d4382a9c413c5cdec6ec4" name="Análisis consumo eléctrico" color="#8cb6ce" meeting="false" start="2025-09-30" duration="4" complete="0" expand="true">
+                <task id="133" uid="f40fc430744d4382a9c413c5cdec6ec4" name="Análisis consumo eléctrico" color="#8cb6ce" meeting="false" start="2025-09-30" duration="4" complete="100" expand="true">
                     <depend id="134" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="134" uid="c3fbfcf34cec4b37a9adf858cb85ba42" name="Análisis disipación de potencia" color="#8cb6ce" meeting="false" start="2025-10-06" duration="4" complete="0" expand="true">
@@ -158,7 +158,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 <task id="135" uid="8e3019e0b5be47a0a396991980124d3b" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-10" duration="4" complete="100" expand="true">
                     <depend id="188" type="2" difference="1" hardness="Strong"/>
                 </task>
-                <task id="136" uid="149723e5b8cb407cb606d4dacb284584" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="60" expand="true">
+                <task id="136" uid="149723e5b8cb407cb606d4dacb284584" name="Generación de listado de materiales (BOM)" color="#8cb6ce" meeting="false" start="2025-09-30" duration="13" complete="100" expand="true">
                     <notes><![CDATA[con su presupuesto, por su unidad y el coste de diseño (horas dedicadas)]]></notes>
                 </task>
                 <task id="137" uid="e92ab4d810e94d57b2443aedf3f6ddbe" name="Documentación esquemático. Control de cambios" color="#8cb6ce" meeting="false" start="2025-09-29" duration="14" complete="10" expand="true">
@@ -167,7 +167,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
 Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 </task>
             </task>
-            <task id="138" uid="9c41bff903b244c18deed7ca9a9b1f29" name="PCB3:Diseño electrónico y captura esquemática" color="#cccc00" meeting="false" start="2025-09-29" duration="14" complete="63" expand="false">
+            <task id="138" uid="9c41bff903b244c18deed7ca9a9b1f29" name="PCB3:Diseño electrónico y captura esquemática" color="#cccc00" meeting="false" start="2025-09-29" duration="14" complete="63" expand="true">
                 <task id="139" uid="325edba6a53d42128ce19b671c67fa1e" name="Busqueda de componentes" color="#8cb6ce" meeting="false" start="2025-09-29" duration="1" complete="100" expand="true">
                     <notes><![CDATA[listado de los componentes
 ]]></notes>
@@ -206,7 +206,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
             <task id="105" uid="6d670ac7cee14ec59b5339c5db9e5047" name="ENTREGA 3 SEMANA" color="#cc00cc" meeting="true" start="2025-10-03" duration="0" complete="100" expand="true"/>
             <task id="106" uid="222c8b616fec4003a6b62dfdb92b0772" name="ENTREGA 4 SEMANA" color="#cc00cc" meeting="true" start="2025-10-10" duration="0" complete="100" expand="true"/>
             <task id="107" uid="dafcdf01b3bd40d1a8c871572a9bb570" name="ENTREGA 5 SEMANA" color="#cc00cc" meeting="true" start="2025-10-17" duration="0" complete="100" expand="true"/>
-            <task id="41" uid="47abb0f946d64c62b31a83e61503d42d" name="PCB0: Diseño de la placa de circuito impreso" color="#009933" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+            <task id="41" uid="47abb0f946d64c62b31a83e61503d42d" name="PCB0: Diseño de la placa de circuito impreso" color="#009933" meeting="false" start="2025-10-17" duration="16" complete="68" expand="false">
                 <task id="42" uid="7740408e738146db8bc99e1030fc743b" name="Creación de huellas de nuevos componentes" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="43" type="1" difference="0" hardness="Strong"/>
                     <depend id="44" type="1" difference="0" hardness="Strong"/>
@@ -221,21 +221,21 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="47" type="2" difference="0" hardness="Strong"/>
                     <depend id="49" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="49" uid="a801a5e9a474496f8febbc063bbcb062" name="Documentación: acotaciones geométricas" meeting="false" start="2025-10-24" duration="11" complete="0" expand="true"/>
-                <task id="47" uid="7c64c71776a54b9da50e45aaf3871c7d" name="Planos de masa y otros" meeting="false" start="2025-10-24" duration="3" complete="0" expand="true">
+                <task id="49" uid="a801a5e9a474496f8febbc063bbcb062" name="Documentación: acotaciones geométricas" meeting="false" start="2025-10-24" duration="11" complete="100" expand="true"/>
+                <task id="47" uid="7c64c71776a54b9da50e45aaf3871c7d" name="Planos de masa y otros" meeting="false" start="2025-10-24" duration="3" complete="100" expand="true">
                     <depend id="50" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="45" uid="699e6bcc70b9430a92a4f2e4993a9bf8" name="Rutado de conexiones" meeting="false" start="2025-10-24" duration="5" complete="0" expand="true"/>
+                <task id="45" uid="699e6bcc70b9430a92a4f2e4993a9bf8" name="Rutado de conexiones" meeting="false" start="2025-10-24" duration="5" complete="100" expand="true"/>
                 <task id="46" uid="e531796764da4c758c476e4838a022a4" name="Planos de disipación térmica" meeting="false" start="2025-10-24" duration="2" complete="0" expand="true">
                     <depend id="50" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="50" uid="c87a214256294f638b0b6e0117e2a33d" name="Generación de ficheros para el fabricante (gerber)" meeting="false" start="2025-10-29" duration="7" complete="0" expand="true">
+                <task id="50" uid="c87a214256294f638b0b6e0117e2a33d" name="Generación de ficheros para el fabricante (gerber)" meeting="false" start="2025-10-29" duration="7" complete="80" expand="true">
                     <depend id="82" type="2" difference="1" hardness="Strong"/>
                     <depend id="86" type="2" difference="10" hardness="Strong"/>
                 </task>
                 <task id="48" uid="24ec5015225c4824b169e2d746ff6e39" name="Documentación: serigrafía. Control de cambios" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="177" uid="e438e10f31c94fb5acf8e1ceafd65dba" name="PCB1:Diseño de la placa de circuito impreso" color="#ff0000" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+            <task id="177" uid="e438e10f31c94fb5acf8e1ceafd65dba" name="PCB1:Diseño de la placa de circuito impreso" color="#ff0000" meeting="false" start="2025-10-17" duration="16" complete="68" expand="false">
                 <task id="178" uid="40f69fc46d78455d89d666c483e31a50" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="179" type="1" difference="0" hardness="Strong"/>
                     <depend id="180" type="1" difference="0" hardness="Strong"/>
@@ -250,21 +250,21 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="183" type="2" difference="0" hardness="Strong"/>
                     <depend id="184" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="181" uid="de2f9796587445efa55b85e4aa772a91" name="Documentación: acotaciones geométricas" color="#8cb6ce" meeting="false" start="2025-10-24" duration="11" complete="0" expand="true"/>
-                <task id="182" uid="d3aae4b3f395447f932942514b98bead" name="Planos de masa y otros" color="#8cb6ce" meeting="false" start="2025-10-24" duration="3" complete="0" expand="true">
+                <task id="181" uid="de2f9796587445efa55b85e4aa772a91" name="Documentación: acotaciones geométricas" color="#8cb6ce" meeting="false" start="2025-10-24" duration="11" complete="100" expand="true"/>
+                <task id="182" uid="d3aae4b3f395447f932942514b98bead" name="Planos de masa y otros" color="#8cb6ce" meeting="false" start="2025-10-24" duration="3" complete="100" expand="true">
                     <depend id="185" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="183" uid="15c5cf9f6dc74d8fb75d0834af0ac0d6" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-24" duration="5" complete="0" expand="true"/>
+                <task id="183" uid="15c5cf9f6dc74d8fb75d0834af0ac0d6" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-24" duration="5" complete="100" expand="true"/>
                 <task id="184" uid="3132136e4b334e7a907b6fddddf082ce" name="Planos de disipación térmica" color="#8cb6ce" meeting="false" start="2025-10-24" duration="2" complete="0" expand="true">
                     <depend id="185" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="185" uid="723e097ca4854f1d9f71300954f000c2" name="Generación de ficheros para el fabricante (gerber)" color="#8cb6ce" meeting="false" start="2025-10-29" duration="7" complete="0" expand="true">
+                <task id="185" uid="723e097ca4854f1d9f71300954f000c2" name="Generación de ficheros para el fabricante (gerber)" color="#8cb6ce" meeting="false" start="2025-10-29" duration="7" complete="80" expand="true">
                     <depend id="82" type="2" difference="1" hardness="Strong"/>
                     <depend id="86" type="2" difference="10" hardness="Strong"/>
                 </task>
                 <task id="186" uid="2d278117c2a9492eb8b58537ac7daff8" name="Documentación: serigrafía. Control de cambios" color="#8cb6ce" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="187" uid="17057df35a324894876118798dd7885b" name="PCB2: Diseño de la placa de circuito impreso" color="#000099" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+            <task id="187" uid="17057df35a324894876118798dd7885b" name="PCB2: Diseño de la placa de circuito impreso" color="#000099" meeting="false" start="2025-10-17" duration="16" complete="68" expand="false">
                 <task id="188" uid="b2585b3a78f74afe98909217c94e2d32" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="189" type="1" difference="0" hardness="Strong"/>
                     <depend id="190" type="1" difference="0" hardness="Strong"/>
@@ -279,21 +279,21 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="193" type="2" difference="0" hardness="Strong"/>
                     <depend id="194" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="191" uid="ca618a5321db4f3aae3a3c2633430d20" name="Documentación: acotaciones geométricas" color="#8cb6ce" meeting="false" start="2025-10-24" duration="11" complete="0" expand="true"/>
-                <task id="192" uid="712a029c1f064330b5705b546abf7716" name="Planos de masa y otros" color="#8cb6ce" meeting="false" start="2025-10-24" duration="3" complete="0" expand="true">
+                <task id="191" uid="ca618a5321db4f3aae3a3c2633430d20" name="Documentación: acotaciones geométricas" color="#8cb6ce" meeting="false" start="2025-10-24" duration="11" complete="100" expand="true"/>
+                <task id="192" uid="712a029c1f064330b5705b546abf7716" name="Planos de masa y otros" color="#8cb6ce" meeting="false" start="2025-10-24" duration="3" complete="100" expand="true">
                     <depend id="195" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="193" uid="eb110e51bd7b4a878f2c1650aa04f08f" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-24" duration="5" complete="0" expand="true"/>
+                <task id="193" uid="eb110e51bd7b4a878f2c1650aa04f08f" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-24" duration="5" complete="100" expand="true"/>
                 <task id="194" uid="99a0ef6fa78b48cfa38436d3f925b2ff" name="Planos de disipación térmica" color="#8cb6ce" meeting="false" start="2025-10-24" duration="2" complete="0" expand="true">
                     <depend id="195" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="195" uid="32732d8fd1d241c4afc73995d4052047" name="Generación de ficheros para el fabricante (gerber)" color="#8cb6ce" meeting="false" start="2025-10-29" duration="7" complete="0" expand="true">
+                <task id="195" uid="32732d8fd1d241c4afc73995d4052047" name="Generación de ficheros para el fabricante (gerber)" color="#8cb6ce" meeting="false" start="2025-10-29" duration="7" complete="80" expand="true">
                     <depend id="82" type="2" difference="1" hardness="Strong"/>
                     <depend id="86" type="2" difference="10" hardness="Strong"/>
                 </task>
                 <task id="196" uid="496f555b0688418591179b33180fa314" name="Documentación: serigrafía. Control de cambios" color="#8cb6ce" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="197" uid="17e5ce9845334b6ebfeed5a27f0adb1a" name="PCB3: Diseño de la placa de circuito impreso" color="#cccc00" meeting="false" start="2025-10-17" duration="16" complete="25" expand="false">
+            <task id="197" uid="17e5ce9845334b6ebfeed5a27f0adb1a" name="PCB3: Diseño de la placa de circuito impreso" color="#cccc00" meeting="false" start="2025-10-17" duration="16" complete="68" expand="false">
                 <task id="198" uid="9821f4e520ab4dc09c2157dc2075b0d6" name="Creación de huellas de nuevos componentes" color="#8cb6ce" meeting="false" start="2025-10-17" duration="5" complete="100" expand="true">
                     <depend id="199" type="1" difference="0" hardness="Strong"/>
                     <depend id="200" type="1" difference="0" hardness="Strong"/>
@@ -308,21 +308,21 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                     <depend id="203" type="2" difference="0" hardness="Strong"/>
                     <depend id="204" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="201" uid="0baa303434044018859f554cabec211f" name="Documentación: acotaciones geométricas" color="#8cb6ce" meeting="false" start="2025-10-24" duration="11" complete="0" expand="true"/>
-                <task id="202" uid="aa4ab0711efb49a6b6345f6f03a6bf43" name="Planos de masa y otros" color="#8cb6ce" meeting="false" start="2025-10-24" duration="3" complete="0" expand="true">
+                <task id="201" uid="0baa303434044018859f554cabec211f" name="Documentación: acotaciones geométricas" color="#8cb6ce" meeting="false" start="2025-10-24" duration="11" complete="100" expand="true"/>
+                <task id="202" uid="aa4ab0711efb49a6b6345f6f03a6bf43" name="Planos de masa y otros" color="#8cb6ce" meeting="false" start="2025-10-24" duration="3" complete="100" expand="true">
                     <depend id="205" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="203" uid="6471ed6b66aa49958ea51c374dd3749f" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-24" duration="5" complete="0" expand="true"/>
+                <task id="203" uid="6471ed6b66aa49958ea51c374dd3749f" name="Rutado de conexiones" color="#8cb6ce" meeting="false" start="2025-10-24" duration="5" complete="100" expand="true"/>
                 <task id="204" uid="bedb2e6e66914516af6a4beae26cd8f3" name="Planos de disipación térmica" color="#8cb6ce" meeting="false" start="2025-10-24" duration="2" complete="0" expand="true">
                     <depend id="205" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="205" uid="70da95063e694882858f9c09edbf3e0b" name="Generación de ficheros para el fabricante (gerber)" color="#8cb6ce" meeting="false" start="2025-10-29" duration="7" complete="0" expand="true">
+                <task id="205" uid="70da95063e694882858f9c09edbf3e0b" name="Generación de ficheros para el fabricante (gerber)" color="#8cb6ce" meeting="false" start="2025-10-29" duration="7" complete="80" expand="true">
                     <depend id="82" type="2" difference="1" hardness="Strong"/>
                     <depend id="86" type="2" difference="10" hardness="Strong"/>
                 </task>
                 <task id="206" uid="5de7770abd6149ac964ec780b2255ed4" name="Documentación: serigrafía. Control de cambios" color="#8cb6ce" meeting="false" start="2025-10-17" duration="15" complete="0" expand="true"/>
             </task>
-            <task id="108" uid="63bb9760a9974712b2924f138370ab5b" name="ENTREGA 6 SEMANA" color="#cc00cc" meeting="true" start="2025-10-24" duration="0" complete="0" expand="true"/>
+            <task id="108" uid="63bb9760a9974712b2924f138370ab5b" name="ENTREGA 6 SEMANA" color="#cc00cc" meeting="true" start="2025-10-24" duration="0" complete="100" expand="true"/>
             <task id="109" uid="8c4ff79ca77a4d268a2a954ffb176dc6" name="ENTREGA 7 SEMANA" color="#cc00cc" meeting="true" start="2025-10-31" duration="0" complete="0" expand="true"/>
             <task id="110" uid="91d097103bfa44c28c683a32324aa7b0" name="ENTREGA 8 SEMANA" color="#cc00cc" meeting="true" start="2025-11-07" duration="0" complete="0" expand="true"/>
             <task id="81" uid="d7a69b8bd343405090232525e0060393" name="Fabricación de la placa de circuito impreso" meeting="false" start="2025-11-10" duration="11" complete="0" expand="false">
