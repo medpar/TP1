@@ -7,8 +7,16 @@
 -[Actualizado] Esquemático 3 por cambio de la antena
 -[Añadido] PCBs 1 y 2
 17/10/25
--[Actualizado] PCBs 1 y 2
+-[añadido] PCBs 1 y 2
 -[Actualizado] Esquemático 0,1 cambios profesor en componentes
+24/10/25
+-[Actualizado] PCBs 0 y 3
+31/10/2025
+-[Actualizado] PCBs 0, 1, 2 y 3
+7/10/2025 
+-[Actualizado] PCBs Finalizadas 
+
+
 
 
 
