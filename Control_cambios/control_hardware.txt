@@ -15,7 +15,7 @@
 -[Actualizado] PCBs 0, 1, 2 y 3
 7/11/2025 
 -[Actualizado] PCBs Finalizadas 
--[Añadido] Ficheros Gerber
+-[Añadido] Ficheros Gerber actualizados
  
 
 
