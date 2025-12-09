@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-10-26" view-index="0" gantt-divider-location="300" resource-divider-location="300" version="2.8.11" locale="es">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-11-09" view-index="0" gantt-divider-location="423" resource-divider-location="300" version="2.8.11" locale="es">
     <description/>
     <view zooming-state="default:6" id="gantt-chart">
-        <field id="tpd3" name="Nombre" width="94" order="0"/>
-        <field id="tpd4" name="Fecha de inicio" width="117" order="1"/>
-        <field id="tpd5" name="Fecha de fin" width="70" order="2"/>
+        <field id="tpd3" name="Nombre" width="278" order="0"/>
+        <field id="tpd4" name="Fecha de inicio" width="15" order="1"/>
+        <field id="tpd5" name="Fecha de fin" width="111" order="2"/>
         <option id="taskLabelRight" value="advancement"/>
         <option id="color.recent"><![CDATA[#cccc00 #000099 #ff0000 #cc00cc #009933 #00ffff #ffff00 #00ff00]]></option>
     </view>
@@ -35,7 +35,7 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="46" expand="true">
+        <task id="22" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="50" expand="true">
             <task id="0" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="8" complete="100" priority="3" expand="false">
                 <depend id="102" type="1" difference="0" hardness="Strong"/>
                 <task id="2" name="Definción de objetivos" meeting="false" start="2025-09-15" duration="4" complete="100" expand="true">
@@ -318,32 +318,32 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
             <task id="108" name="ENTREGA 6 SEMANA" color="#cc00cc" meeting="true" start="2025-10-24" duration="0" complete="100" expand="true"/>
             <task id="109" name="ENTREGA 7 SEMANA" color="#cc00cc" meeting="true" start="2025-10-31" duration="0" complete="100" expand="true"/>
             <task id="110" name="ENTREGA 8 SEMANA" color="#cc00cc" meeting="true" start="2025-11-07" duration="0" complete="100" thirdDate="2025-11-07" thirdDate-constraint="0" expand="true"/>
-            <task id="81" name="Fabricación de la placa de circuito impreso" meeting="false" start="2025-11-10" duration="11" complete="41" expand="true">
+            <task id="81" name="Fabricación de la placa de circuito impreso" meeting="false" start="2025-11-10" duration="11" complete="72" expand="false">
                 <task id="82" name="Envío al fabricante" color="#8cb6ce" meeting="false" start="2025-11-10" duration="4" complete="100" thirdDate="2025-11-10" thirdDate-constraint="0" expand="true">
                     <depend id="83" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="83" name="Recepción y revisión" meeting="false" start="2025-11-14" duration="1" complete="0" expand="true">
+                <task id="83" name="Recepción y revisión" color="#8cb6ce" meeting="false" start="2025-11-14" duration="1" complete="100" thirdDate="2025-11-14" thirdDate-constraint="0" expand="true">
                     <depend id="84" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="84" name="Montaje de componentes" color="#8cb6ce" meeting="false" start="2025-11-17" duration="6" complete="10" thirdDate="2025-11-17" thirdDate-constraint="0" expand="true"/>
+                <task id="84" name="Montaje de componentes" color="#8cb6ce" meeting="false" start="2025-11-17" duration="6" complete="50" thirdDate="2025-11-17" thirdDate-constraint="0" expand="true"/>
             </task>
             <task id="111" name="ENTREGA 9 SEMANA" color="#cc00cc" meeting="true" start="2025-11-21" duration="0" complete="100" expand="true"/>
-            <task id="85" name="Realización Hardware FPGA." meeting="false" start="2025-11-21" duration="15" complete="0" expand="false">
-                <task id="86" name="Core: LarVA." meeting="false" start="2025-11-21" duration="5" complete="0" expand="true">
+            <task id="85" name="Realización Hardware FPGA." meeting="false" start="2025-11-21" duration="15" complete="56" expand="true">
+                <task id="86" name="Core: LarVA." color="#8cb6ce" meeting="false" start="2025-11-21" duration="5" complete="80" thirdDate="2025-11-21" thirdDate-constraint="0" expand="true">
                     <depend id="87" type="1" difference="0" hardness="Strong"/>
                     <depend id="88" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="87" name="Periféricos: UART0/1/2, SPI0/1, Temporizador, GPOut, GPIn,.." meeting="false" start="2025-11-21" duration="7" complete="0" expand="true">
+                <task id="87" name="Periféricos: UART0/1/2, SPI0/1, Temporizador, GPOut, GPIn,.." color="#8cb6ce" meeting="false" start="2025-11-21" duration="7" complete="80" thirdDate="2025-11-21" thirdDate-constraint="0" expand="true">
                     <depend id="88" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="88" name="Simulación" meeting="false" start="2025-12-02" duration="8" complete="0" expand="true">
+                <task id="88" name="Simulación" color="#8cb6ce" meeting="false" start="2025-12-02" duration="8" complete="20" thirdDate="2025-12-02" thirdDate-constraint="0" expand="true">
                     <depend id="90" type="2" difference="0" hardness="Strong"/>
                     <depend id="95" type="2" difference="0" hardness="Strong"/>
                 </task>
             </task>
             <task id="112" name="ENTREGA 10 SEMANA" color="#cc00cc" meeting="true" start="2025-11-28" duration="0" complete="100" thirdDate="2025-11-28" thirdDate-constraint="0" expand="true"/>
-            <task id="113" name="ENTREGA 11 SEMANA" color="#cc00cc" meeting="true" start="2025-12-05" duration="0" complete="0" expand="true"/>
-            <task id="89" name="Realización Firmware. Simulación y depuración" meeting="false" start="2025-12-12" duration="14" complete="0" expand="false">
+            <task id="113" name="ENTREGA 11 SEMANA" color="#cc00cc" meeting="true" start="2025-12-05" duration="0" complete="100" thirdDate="2025-12-05" thirdDate-constraint="0" expand="true"/>
+            <task id="89" name="Realización Firmware. Simulación y depuración" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true">
                 <task id="90" name="Control de elementos hardware: drivers" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true">
                     <depend id="91" type="1" difference="0" hardness="Strong"/>
                     <depend id="92" type="1" difference="0" hardness="Strong"/>
@@ -353,7 +353,7 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 <task id="92" name="Programa principal. Especificaciones" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
                 <task id="93" name="Documentación firmware. Control de cambios" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
             </task>
-            <task id="94" name="Verificación hardware" meeting="false" start="2025-12-12" duration="40" complete="0" expand="true">
+            <task id="94" name="Verificación hardware" meeting="false" start="2025-12-12" duration="40" complete="0" expand="false">
                 <task id="95" name="Verificación inicial" meeting="false" start="2025-12-12" duration="20" complete="0" expand="true">
                     <depend id="96" type="1" difference="0" hardness="Strong"/>
                     <depend id="97" type="1" difference="0" hardness="Strong"/>

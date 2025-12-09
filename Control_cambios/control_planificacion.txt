@@ -22,10 +22,15 @@
 31/10/2025
 -[Actualizado] Diagrama de Gantt
 -[Actualizado] Diario de trabajo
-07/10/25
+07/11/25
 -[Actualizado] Diagrama de Gantt
 -[Actualizado] Diario de trabajo
-21/10/25
+21/11/25
 -[Actualizado] Diagrama de Gantt
 -[Actualizado] Diario de trabajo
-
+28/11/25
+-[Actualizado] Diagrama de Gantt
+-[Actualizado] Diario de trabajo
+05/12/25
+-[Actualizado] Diagrama de Gantt
+-[Actualizado] Diario de trabajo
