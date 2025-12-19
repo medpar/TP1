@@ -14,6 +14,8 @@
 .apdisk
 
 # Archive files
+*.rar
+*.zip
 *.tar
 *.gz
 *.bz2
@@ -22,3 +24,4 @@
 # Workspace and backup artifacts
 **/Project\ Backups/
 *.workspace
+**/tools/
