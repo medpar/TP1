@@ -1,0 +1,130 @@
+Archive member included to satisfy reference by file (symbol)
+
+c:/tp1_rv32e/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+                              C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o (__udivsi3)
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+RAM              0x0000000000000000 0x0000000000004000 xrw
+*default*        0x0000000000000000 0xffffffffffffffff
+
+Linker script and memory map
+
+
+.text           0x0000000000000000     0x1070
+                0x0000000000000000                . = ALIGN (0x4)
+ *(.boot)
+ .boot          0x0000000000000000        0x4 C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+ *(.text)
+ .text          0x0000000000000004       0x68 C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+                0x0000000000000060                delay_loop
+ .text          0x000000000000006c      0xa98 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+                0x000000000000006c                irq2_handler
+                0x0000000000000088                irq3_handler
+                0x00000000000000ec                irq4_handler
+                0x000000000000013c                irq5_handler
+                0x00000000000001a0                irq6_handler
+                0x00000000000001f0                irq7_handler
+                0x0000000000000254                irq8_handler
+                0x00000000000002a4                _putch
+                0x000000000000077c                _puts
+                0x00000000000007b0                _printf
+                0x00000000000007ec                _sprintf
+                0x0000000000000824                _getchUART
+                0x0000000000000868                _getchUART1
+                0x00000000000008ac                _getchUART2
+                0x00000000000008f0                hascharUART0
+                0x000000000000090c                hascharUART1
+                0x0000000000000928                hascharUART2
+                0x0000000000000944                getMEPC
+                0x0000000000000950                irq1_handler
+                0x00000000000009c0                spixfer
+                0x00000000000009e0                getw
+                0x0000000000000a34                getw1
+                0x0000000000000a88                getw2
+                0x0000000000000adc                _memcpy
+ .text          0x0000000000000b04       0xb4 c:/tp1_rv32e/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+                0x0000000000000b04                __divsi3
+                0x0000000000000b0c                __udivsi3
+                0x0000000000000b0c                __hidden___udivsi3
+                0x0000000000000b54                __umodsi3
+                0x0000000000000b88                __modsi3
+ *(.text*)
+ .text.startup  0x0000000000000bb8      0x2bc C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+                0x0000000000000bb8                main
+ *(.rodata)
+ *(.rodata*)
+ .rodata.str1.4
+                0x0000000000000e74      0x1fc C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+ *(.srodata)
+ *(.srodata*)
+                0x0000000000001070                _etext = .
+                0x0000000000001070                _sidata = _etext
+
+.rela.dyn       0x0000000000001070        0x0
+ .rela.text     0x0000000000001070        0x0 C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+
+.data           0x0000000000001070        0x4
+                0x0000000000001070                . = ALIGN (0x4)
+                0x0000000000001070                _sdata_values = LOADADDR (.data)
+                0x0000000000001070                _sdata = .
+                0x0000000000001070                _ram_start = .
+                0x0000000000001070                . = ALIGN (0x4)
+ *(.data)
+ .data          0x0000000000001070        0x0 C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+ .data          0x0000000000001070        0x0 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+ .data          0x0000000000001070        0x0 c:/tp1_rv32e/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+ *(.data*)
+ *(.sdata)
+ .sdata         0x0000000000001070        0x3 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+ *(.sdata*)
+                0x0000000000001074                . = ALIGN (0x4)
+ *fill*         0x0000000000001073        0x1 
+                0x0000000000001074                _edata = .
+
+.bss            0x0000000000001074       0x68
+                0x0000000000001074                . = ALIGN (0x4)
+                0x0000000000001074                _sbss = .
+ *(.bss)
+ .bss           0x0000000000001074        0x0 C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+ .bss           0x0000000000001074       0x60 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+                0x0000000000001074                udat0
+                0x0000000000001094                udat1
+                0x00000000000010b4                udat2
+ .bss           0x00000000000010d4        0x0 c:/tp1_rv32e/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+ *(.bss*)
+ *(.sbss)
+ .sbss          0x00000000000010d4        0x6 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+                0x00000000000010d4                wrix2
+                0x00000000000010d5                rdix2
+                0x00000000000010d6                wrix1
+                0x00000000000010d7                rdix1
+                0x00000000000010d8                wrix0
+                0x00000000000010d9                rdix0
+ *(.sbss*)
+ *(COMMON)
+                0x00000000000010dc                . = ALIGN (0x4)
+ *fill*         0x00000000000010da        0x2 
+                0x00000000000010dc                _ebss = .
+
+.heap           0x00000000000010dc        0x0
+                0x00000000000010dc                . = ALIGN (0x4)
+                0x00000000000010dc                _heap_start = .
+LOAD C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+LOAD C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+LOAD c:/tp1_rv32e/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a
+OUTPUT(code.elf elf32-littleriscv)
+
+.riscv.attributes
+                0x0000000000000000       0x20
+ .riscv.attributes
+                0x0000000000000000       0x1a C:\Users\INVITA~1\AppData\Local\Temp\ccU3dh6c.o
+ .riscv.attributes
+                0x000000000000001a       0x20 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+ .riscv.attributes
+                0x000000000000003a       0x1a c:/tp1_rv32e/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+
+.comment        0x0000000000000000       0x33
+ .comment       0x0000000000000000       0x33 C:\Users\INVITA~1\AppData\Local\Temp\ccKq8xGz.o
+                                         0x34 (size before relaxing)
