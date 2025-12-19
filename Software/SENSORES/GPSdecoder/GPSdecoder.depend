@@ -20,3 +20,24 @@
 	<string.h>
 	<stdarg.h>
 
+1766140313 source:c:\users\sanch\onedrive\documentos\universidad\master\tpi\se\tp1-g1\software\sensores\gpsdecoder\main.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<time.h>
+	"minmea.h"
+
+1766137716 c:\users\sanch\onedrive\documentos\universidad\master\tpi\se\tp1-g1\software\sensores\gpsdecoder\minmea.h
+	<ctype.h>
+	<stdint.h>
+	<stdbool.h>
+	<time.h>
+	<math.h>
+	<minmea_compat.h>
+
+1766137845 source:c:\users\sanch\onedrive\documentos\universidad\master\tpi\se\tp1-g1\software\sensores\gpsdecoder\minmea.c
+	"minmea.h"
+	<stdlib.h>
+	<string.h>
+	<stdarg.h>
+
