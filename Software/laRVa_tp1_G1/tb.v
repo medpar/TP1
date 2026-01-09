@@ -16,7 +16,7 @@ wire txd;
 
 SYSTEM sys1(	.clk(clk),		// Main clock input 25MHz
 	.reset(~resetb),
-	.rxd_0(rxd)
+	.rxd(rxd)
 );
 
 // Reloj periódico
@@ -47,7 +47,7 @@ initial begin
 	
 	# 319 $display("FIN de la simulacion");
 	//# 300000 $finish;
-	# 100000 $finish;
+	# 1000 $finish;
 end
 
 

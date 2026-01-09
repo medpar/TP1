@@ -100,22 +100,6 @@ IO register map (all registers accessed as 32-bit words):
     ------
     GPOUT: General purpose outputs.
 	
-	// GPOUT definitions
-	`define LORA_RESET  (1 << 10)
-	`define L_RX        (1 << 9)
-	`define L_TX        (1 << 8)
-	`define EN_5V_UP    (1 << 7)
-	`define EN_5V_M4    (1 << 6)
-	`define EN_1V4_M4   (1 << 5)
-	`define M2_ON_OFF   (1 << 4)
-	`define LED3        (1 << 3)
-	`define LED2        (1 << 2)
-	`define LED1        (1 << 1)
-	`define LED0        (1 << 0)
-
-	// GPIN definitions	
-	`define LORA_DIO1   (1 << 1)
-	`define LORA_BUSY   (1 << 0)
     ------
     GPIN: General purpose inputs.
 
@@ -139,7 +123,22 @@ IO register map (all registers accessed as 32-bit words):
 `include "laRVa.v"
 `include "uart.v"
 
+// GPOUT definitions
+`define LORA_RESET  (1 << 10)
+`define L_RX        (1 << 9)
+`define L_TX        (1 << 8)
+`define EN_5V_UP    (1 << 7)
+`define EN_5V_M4    (1 << 6)
+`define EN_1V4_M4   (1 << 5)
+`define M2_ON_OFF   (1 << 4)
+`define LED3        (1 << 3)
+`define LED2        (1 << 2)
+`define LED1        (1 << 1)
+`define LED0        (1 << 0)
 
+// GPIN definitions	
+`define LORA_DIO1   (1 << 1)
+`define LORA_BUSY   (1 << 0)
 	
 module SYSTEM (
 	input clk,		// Main clock input 25MHz
@@ -153,7 +152,13 @@ module SYSTEM (
 	output txd_1,
 
 	input  rxd_2,// UART2
-	output txd_2
+	output txd_2,
+
+	output sck,		// SPI (no implementado)
+	output mosi,
+	input  miso,	
+	output fssb	// Flash CS
+
 );
 
 wire		cclk;	// CPU clock
@@ -206,7 +211,7 @@ always@*
 ///////////////////////////////////////////////////////
 wire [31:0] mdo; // memory data output 
 ram32 ram0 (  
-    .clk       (~cclk),  
+    .clk       (~clk),  
 	.re        (iramcs),  
     .wrlanes   (iramcs?mwe:4'b0000), 
 	.addr      (ca[13:2]), // Máximo 4096 direcciones 
@@ -223,43 +228,33 @@ always @(posedge clk or posedge reset) begin
 	else tcount<=tcount+1;
 end
 
-
-
-// REVISAR ESTO TAMBIEN
-
-
 wire uart0cs;	// UART0	at offset 0x80
 wire uart1cs;	// UART1	at offset 0x90
 wire uart2cs;	// UART2	at offset 0xA0
 
 wire spics;		// SPI	(no implementado)
-wire irqcs;		// IRQ control at offset 0x00-0x1F
-wire irqcsen;	// IRQ control at offset 0x20
+wire irqcs;		// IRQ control at offset 0x00-0x1F and 0x20
 				
 assign uart0cs = iocs&(ca[7:4]==4'b1000);  // 0xE0000080-0xE000008F
 assign uart1cs = iocs&(ca[7:4]==4'b1001);  // 0xE0000090-0xE000009F
 assign uart2cs = iocs&(ca[7:4]==4'b1010);  // 0xE00000A0-0xE00000AF
 
 //assign spics  = iocs&(ca[7:5]==3'b011);  // No implementado
-assign irqcs   = iocs&(ca[7:5]==3'b000);    // 0xE0000000-0xE000001F
-assign irqcsen = iocs&(ca[7:4]==4'b0010);   // 0xE0000020-0xE000002F
+assign irqcs  = iocs&(ca[7:5]==3'b000);    // 0xE0000000-0xE000003F
 
 // Peripheral output bus mux
 reg [31:0]iodo;	// Not a register
 always@*
  casex (ca[7:2])
- 
-	6'b100000: iodo<={24'hx,uart0_do};         // UART0 RX data
-	6'b100001: iodo<={27'hx,ove0,fe0,tend0,thre0,dv0}; // UART0 flags
+	6'b100xx0: iodo<={24'hx,uart0_do};         // UART0 RX data
+	6'b100xx1: iodo<={27'hx,ove0,fe0,tend0,thre0,dv0}; // UART0 flags
 	6'b100100: iodo<={24'hx,uart1_do};         // UART1 RX data
 	6'b100101: iodo<={27'hx,ove1,fe1,tend1,thre1,dv1}; // UART1 flags
-	6'b101000: iodo<={24'hx,uart2_do};         // UART2 RX data
-	6'b101001: iodo<={27'hx,ove2,fe2,tend2,thre2,dv2}; // UART2 flags
-	6'b010000: iodo<=tcount;                   // Timer counter
-	6'b001000: iodo<={24'hx,irqen};            // Interrupt enable
-
-	default:  iodo <= 32'h0;
-		
+	6'b101xx0: iodo<={24'hx,uart2_do};         // UART2 RX data
+	6'b101xx1: iodo<={27'hx,ove2,fe2,tend2,thre2,dv2}; // UART2 flags
+	6'b001xxx: iodo<=tcount;                   // Timer counter
+	6'b000xxx: iodo<={24'hx,irqen};            // Interrupt enable
+	default: iodo<=32'hxxxxxxxx;
  endcase
 
 /////////////////////////////
@@ -271,12 +266,10 @@ wire [7:0] uart0_do;	// UART0 RX output data
 wire uwrtx0;			// UART0 TX write
 wire urd0;				// UART0 RX read (for flag clearing)
 wire uwrbaud0;			// UART0 BGR write
-
 // Register mapping
 // Offset 0: write: TX Holding reg
 // Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
 // Offset 1: write: BAUD divider
-
 assign uwrtx0   = uart0cs & (~ca[2]) & mwe[0];
 assign uwrbaud0 = uart0cs & ( ca[2]) & mwe[0] & mwe[1];
 assign urd0     = uart0cs & (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flags
@@ -335,27 +328,23 @@ UART_CORE #(.BAUDBITS(12)) uart2 ( .clk(cclk), .txd(txd_2), .rxd(rxd_2),
 reg [7:0]irqen=0;
 always @(posedge cclk or posedge reset) begin
 	if (reset) irqen<=0; else
-	if (irqcsen & mwe[0]) irqen<=cdo[7:0];
+	if (irqcs & (~ca[5]) & mwe[0]) irqen<=cdo[7:0];
 end
 
 // IRQ vectors
 reg [31:2]irqvect[0:7];
-assign v2 = {irqvect[2],2'b00};
-
-always @(posedge cclk) 
- if (irqcs & (mwe==4'b1111)) 
-  irqvect[ca[4:2]]<=cdo[31:2];
+always @(posedge cclk) if (irqcs & ca[5] & (mwe==4'b1111)) irqvect[ca[4:2]]<=cdo[31:2];
 
 // Timer interrupt (placeholder - no implementado completamente)
 wire timer_irq = 1'b0;  // TODO: Implementar comparador con MAX_COUNT
 
 // Enabled IRQs (7 interrupts: timer, uart0_rx, uart0_tx, uart1_rx, uart1_tx, uart2_rx, uart2_tx)
-wire [6:0]irqpen={irqen[6]&thre2,  // UART2 TX
-                  irqen[5]&dv2,    // UART2 RX
-                  irqen[4]&thre1,  // UART1 TX
-				  irqen[3]&dv1,    // UART1 RX
-                  irqen[2]&thre0,  // UART0 TX
-				  irqen[1]&dv0,    // UART0 RX
+wire [6:0]irqpen={irqen[6]&dv2,    // UART2 RX
+                  irqen[5]&thre2,  // UART2 TX
+                  irqen[4]&dv1,    // UART1 RX
+                  irqen[3]&thre1,  // UART1 TX
+                  irqen[2]&dv0,    // UART0 RX
+                  irqen[1]&thre0,  // UART0 TX
                   irqen[0]&timer_irq}; // Timer
 
 // Priority encoder (8 vectors: trap=0, timer=1, uart0_rx=2, uart0_tx=3, uart1_rx=4, uart1_tx=5, uart2_rx=6, uart2_tx=7)
@@ -372,51 +361,62 @@ wire [2:0]vecn = trap       ? 3'b000 : (
 assign ivector = irqvect[vecn];
 assign irq = (irqpen!=0)|trap;
 
+// SPI signals no implementados - asignados a valores seguros
+assign sck = 1'b0;
+assign mosi = 1'b0;
+assign fssb = 1'b1; // Chip select inactivo (active low)
+
 endmodule	// System
+
+
+
+
 //////////////////////////////////////////////////////////////////////////////
 //----------------------------------------------------------------------------
 //-- 32-bit RAM Memory with independent byte-write lanes
 //----------------------------------------------------------------------------
 //////////////////////////////////////////////////////////////////////////////
-module ram32
+
+module ram32 
 (
-    input                         clk,
-    input                         re,
-    input       [3:0]             wrlanes,
+    input                     clk,
+    input                     re,
+    input       [3:0]         wrlanes,
     input       [L2N_RAM_SIZE-1:0] addr,
-    output      [31:0]            data_read,
-    input       [31:0]            data_write
+    output      [31:0]        data_read,
+    input       [31:0]        data_write
 );
 
-    parameter   RAM_SIZE = 4096;
-    localparam  L2N_RAM_SIZE = $clog2(RAM_SIZE);
-    reg [31:0] ram_array [0:RAM_SIZE-1];
-    reg [31:0] data_out;
-    assign data_read = data_out;
-    // Escritura por bytes
-    always @(posedge clk) begin
-        if (wrlanes[0])
-            ram_array[addr][ 7: 0] <= data_write[ 7: 0];
-        if (wrlanes[1])
-            ram_array[addr][15: 8] <= data_write[15: 8];
-        if (wrlanes[2])
-            ram_array[addr][23:16] <= data_write[23:16];
-        if (wrlanes[3])
-            ram_array[addr][31:24] <= data_write[31:24];
-    end
-    // Lectura síncrona
-    always @(posedge clk) begin
-        if (re)
-            data_out <= ram_array[addr];
-    end
-    // Inicialización de memoria
-    initial begin
-        `ifdef SIMULATION
-            $readmemh("rom.hex", ram_array);
-        `else
-            $readmemh("rand.hex", ram_array);
-        `endif
-    end
+parameter RAM_SIZE = 4096;
+localparam L2N_RAM_SIZE = $clog2(RAM_SIZE);
+
+reg [31:0] ram_array [0:RAM_SIZE-1];
+reg [31:0] data_out;
+
+assign data_read = data_out;
+
+// Escritura
+always @(posedge clk) begin
+    if (wrlanes[0]) ram_array[addr][ 7: 0] <= data_write[ 7: 0];
+    if (wrlanes[1]) ram_array[addr][15: 8] <= data_write[15: 8];
+    if (wrlanes[2]) ram_array[addr][23:16] <= data_write[23:16];
+    if (wrlanes[3]) ram_array[addr][31:24] <= data_write[31:24];
+end
+
+// Lectura
+always @(posedge clk) begin
+    if (re) data_out <= ram_array[addr];
+end
+
+// Inicialización
+initial begin
+`ifdef SIMULATION
+    $readmemh("rom.hex", ram_array);
+`else
+    $readmemh("rand.hex", ram_array);
+`endif
+end
 
 endmodule
+
 
