@@ -1,6 +1,6 @@
 #define CS_BME680 0b10
 
-#define STATUS_BME 0x73 
+#define STATUS_BME 0x73
 #define RESET_BME 0x60
 #define ID_BME 0x50
 
