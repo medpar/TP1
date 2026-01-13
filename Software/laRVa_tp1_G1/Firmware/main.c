@@ -1,5 +1,20 @@
-#include <stdint.h>
 
+
+#include <stdint.h>
+#include <time.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+// Modulos externos
+#include "moduloMQ9.h"
+#include "moduloBME680.h"
+#include "moduloTEL0132.h"
+#include "lora_sx1262.h"
+#include "SPI.h"
+#include "moduloMCP3004.h"
+
+// Tipos de datos
 typedef unsigned char  u8;
 typedef unsigned short u16;
 typedef unsigned int   u32;
@@ -8,47 +23,57 @@ typedef signed char  s8;
 typedef signed short s16;
 typedef signed int   s32;
 
+volatile int state;  
+volatile int read_CO;    
+volatile int read_CH4;
 
 //-- Registros mapeados
+// UART0
 #define UARTDAT  (*(volatile uint8_t*)0xE0000080)
 #define UARTSTA  (*(volatile uint32_t*)0xE0000084)
 #define UARTBAUD (*(volatile uint32_t*)0xE0000084)
 
+// UART1
 #define UART1DAT  (*(volatile uint8_t*)0xE0000090)
 #define UART1STA  (*(volatile uint32_t*)0xE0000094)
 #define UART1BAUD (*(volatile uint32_t*)0xE0000094)
 
-
+// UART2
 #define UART2DAT  (*(volatile uint8_t*)0xE00000A0)
 #define UART2STA  (*(volatile uint32_t*)0xE00000A4)
 #define UART2BAUD (*(volatile uint32_t*)0xE00000A4)
 
-
+// SPI
 #define SPIDAT	 (*(volatile uint32_t*)0xE0000070)
-#define SPICTL	 (*(volatile uint32_t*)0xE0000074)
+#define SPICTRL	 (*(volatile uint32_t*)0xE0000074)
 #define SPISTA	 (*(volatile uint32_t*)0xE0000074)
 #define SPISS	 (*(volatile uint32_t*)0xE0000078)
 
+//SPI1
 #define SPI1DAT	 (*(volatile uint32_t*)0xE0000060)
 #define SPI1CTL	 (*(volatile uint32_t*)0xE0000064)
 #define SPI1STA	 (*(volatile uint32_t*)0xE0000064)
 #define SPI1SS	 (*(volatile uint32_t*)0xE0000068)
 
-#define TCNT     (*(volatile uint32_t*)0xE0000040) 
+
+// TIMER
+#define TIMER     (*(volatile uint32_t*)0xE0000040) 
+
 
 #define GPOUT  (*(volatile uint8_t*)0xE0000030) 
 #define GPIN   (*(volatile uint8_t*)0xE0000034) 
 
-#define IRQEN	 (*(volatile uint32_t*)0xE0000020)
 
-#define IRQVECT0 (*(volatile uint32_t*)0xE0000000)
-#define IRQVECT1 (*(volatile uint32_t*)0xE0000004)
-#define IRQVECT2 (*(volatile uint32_t*)0xE0000008)
-#define IRQVECT3 (*(volatile uint32_t*)0xE000000C)
-#define IRQVECT4 (*(volatile uint32_t*)0xE0000010)
-#define IRQVECT5 (*(volatile uint32_t*)0xE0000014)
-#define IRQVECT6 (*(volatile uint32_t*)0xE0000018)
-#define IRQVECT7 (*(volatile uint32_t*)0xE000001C)
+//IRQs vectors
+#define IRQEN	 (*(volatile uint32_t*)0xE0000020) //Enable
+#define IRQVECT0 (*(volatile uint32_t*)0xE0000000) //Trap
+#define IRQVECT1 (*(volatile uint32_t*)0xE0000004) //Timer
+#define IRQVECT2 (*(volatile uint32_t*)0xE0000008) //UART0 RX
+#define IRQVECT3 (*(volatile uint32_t*)0xE000000C) //UART0 TX
+#define IRQVECT4 (*(volatile uint32_t*)0xE0000010) //UART1 RX
+#define IRQVECT5 (*(volatile uint32_t*)0xE0000014) //UART1 TX
+#define IRQVECT6 (*(volatile uint32_t*)0xE0000018) //UART2 RX
+#define IRQVECT7 (*(volatile uint32_t*)0xE000001C) //UART2 TX
 
 
 
@@ -81,9 +106,55 @@ uint8_t _getch()
 uint8_t haschar() {return UARTSTA&1;}
 */
 
+//FIFOs
+uint8_t udat0[32]; 				//FIFO UART0
+volatile uint8_t rdix0, wrix0; 	//Read index and write index
+
+uint8_t udat1[32]; 				//FIFO UART1
+volatile uint8_t rdix1, wrix1; 	//Read index and write index
+
+uint8_t udat2[32]; 				//FIFO UART2
+volatile uint8_t rdix2, wrix2; 	//Read index and write index	
+
+//Read of UART0
+uint8_t _getchUART0()
+{
+	uint8_t d;
+	while(rdix0==wrix0);
+	d=udat0[rdix0++];
+	rdix0 &=31;
+	return d;
+}
+
+//Read of UART1(moduloTEL0132)
+uint8_t _getchUART1()
+{
+	uint8_t d;
+	while(rdix1==wrix1);
+	d=udat1[rdix1++];
+	rdix1 &=31;
+	return d;
+}
+
+//Read of UART2
+uint8_t _getchUART2()
+{
+	uint8_t d;
+	while(rdix2==wrix2);
+	d=udat2[rdix2++];
+	rdix2 &=31;
+	return d;
+}
+ 
 
 #define putchar(d) _putch(d)
 #include "printf.c"
+#include "modulomoduloMQ9.c"
+#include "moduloBME680.c"
+#include "moduloTEL0132.c"
+#include "lora_sx1262.c"
+#include "SPI.c"
+#include "moduloMCP3004.c"
 
 const static char *menutxt="\n"
 "\n\n"
@@ -100,50 +171,14 @@ const static char *menutxt="\n"
 
 // Cambios Clara y Miguel
 
-uint8_t udat0[32];
-volatile uint8_t rdix0, wrix0;
-
-uint8_t udat1[32];
-volatile uint8_t rdix1, wrix1;
-
-uint8_t udat2[32];
-volatile uint8_t rdix2, wrix2;
-
-
-
-uint8_t _getchUART()
-{
-	uint8_t d;
-	while(rdix0==wrix0);
-	d=udat0[rdix0++];
-	rdix0 &=31;
-	return d;
-}
-
-uint8_t _getchUART1()
-{
-    uint8_t d;
-    while (rdix1 == wrix1);
-    d = udat1[rdix1++];
-    rdix1 &= 31;
-    return d;
-}
-
-uint8_t _getchUART2()
-{
-	uint8_t d;
-	while(rdix2==wrix2);
-	d=udat2[rdix2++];
-	rdix2 &=31;
-	return d;
-}
- 
 uint8_t hascharUART0(){return wrix0 - rdix0;}
-
+// uint8_t hascharUART0(){return (wrix0 - rdix0) & 31;} // Opción que soluciona el problema de overflow
 
 uint8_t hascharUART1(){return wrix1 - rdix1;}
+// uint8_t hascharUART1(){return (wrix1 - rdix1) & 31;} // Opción que soluciona el problema de overflow
 
 uint8_t hascharUART2(){return wrix2 - rdix2;}
+// uint8_t hascharUART2(){return (wrix2 - rdix2) & 31;} // Opción que soluciona el problema de overflow
 
 
 uint32_t __attribute__((naked)) getMEPC()
@@ -157,60 +192,60 @@ uint32_t __attribute__((naked)) getMEPC()
 	);
 }
 
-//interrupciones
-void __attribute__((interrupt ("machine"))) irq1_handler()
+//Interruptions
+void __attribute__((interrupt ("machine"))) irq0_handler()
 {
 	_printf("\nTRAP at 0x%x\n",getMEPC());
 }
 
-//timer
-void __attribute__((interrupt ("machine"))) irq2_handler()
+//Timer
+void __attribute__((interrupt ("machine"))) irq1_handler()
 {
 	IRQEN = 0b00000000;
 	
 }
 
-//uart rx
-void __attribute__((interrupt ("machine"))) irq3_handler()
+//UART0 RX
+void __attribute__((interrupt ("machine"))) irq2_handler()
 {
     udat0[wrix0++] = UARTDAT;
     wrix0 &= 31;
 }
 
 
-//uart tx
-void  __attribute__((interrupt ("machine"))) irq4_handler(){
+//UART0 TX
+void  __attribute__((interrupt ("machine"))) irq3_handler(){
 	static uint8_t a=32;
 	UARTDAT=a;
 	if (++a>=128) a=32;
 }
 
-//uart1 rx
-void __attribute__((interrupt ("machine"))) irq5_handler()
+//UART1 RX
+void __attribute__((interrupt ("machine"))) irq4_handler()
 {
     udat1[wrix1++] = UART1DAT;
     wrix1 &= 31;
 }
 
 
-//uart1 tx
-void  __attribute__((interrupt ("machine"))) irq6_handler(){
+//UART1 TX
+void  __attribute__((interrupt ("machine"))) irq5_handler(){
 	static uint8_t a=32;
 	UART1DAT=a;
 	if (++a>=128) a=32;
 }
 
 
-//uart2 rx
-void __attribute__((interrupt ("machine"))) irq7_handler()
+//UART2 RX
+void __attribute__((interrupt ("machine"))) irq6_handler()
 {
     udat2[wrix2++] = UART2DAT;
     wrix2 &= 31;
 }
 
 
-//uart2 tx
-void  __attribute__((interrupt ("machine"))) irq8_handler(){
+//UART2 TX
+void  __attribute__((interrupt ("machine"))) irq7_handler(){
 	static uint8_t a=32;
 	UART2DAT=a;
 	if (++a>=128) a=32;
@@ -219,7 +254,7 @@ void  __attribute__((interrupt ("machine"))) irq8_handler(){
 
 
 // --------------------------------------------------------
-
+// REvisar esto  y sobre todo la posición
 uint32_t spixfer (uint32_t d)
 {
 	SPIDAT=d;
@@ -230,18 +265,22 @@ uint32_t spixfer (uint32_t d)
 // --------------------------------------------------------
 
 #define BAUD 115200
+// #define BAUD1 9600 // No sé si hay que definir otros BAUDs para las otras UARTs
+// #define BAUD2 9600
 #define NULL ((void *)0)
 
+// Get word from UART0
 uint32_t getw()
 {
 	uint32_t i;
-	i=_getchUART();
-	i|=_getchUART()<<8;
-	i|=_getchUART()<<16;
-	i|=_getchUART()<<24;
+	i=_getchUART0();
+	i|=_getchUART0()<<8;
+	i|=_getchUART0()<<16;
+	i|=_getchUART0()<<24;
 	return i;
 }
 
+// Get word from UART1
 uint32_t getw1()
 {
 	uint32_t i;
@@ -252,6 +291,7 @@ uint32_t getw1()
 	return i;
 }
 
+// Get word from UART2
 uint32_t getw2()
 {
 	uint32_t i;
@@ -263,6 +303,7 @@ uint32_t getw2()
 }
 
 
+// Copy memory
 uint8_t *_memcpy(uint8_t *pdst, uint8_t *psrc, uint32_t nb)
 {
 	if (nb) do {*pdst++=*psrc++; } while (--nb);
@@ -270,6 +311,7 @@ uint8_t *_memcpy(uint8_t *pdst, uint8_t *psrc, uint32_t nb)
 }
 
 //CHANGE CLARA MIGUEL
+// Main function
 void main()
 {
 
@@ -280,6 +322,7 @@ void main()
 	void (*pcode)();
 	uint32_t *pi;
 	uint16_t *ps;
+	int temp,press,hum;
 /*
     UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	
 	c = UARTDAT;		// Clear RX garbage
@@ -287,10 +330,11 @@ void main()
 	IRQVECT2=(uint32_t)irq2_handler;
     IRQEN = (1<<2);
 */	
-	
-	UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	
-	UART1BAUD = (CCLK+BAUD/2)/BAUD -1;
-	UART2BAUD = (CCLK+BAUD/2)/BAUD -1;
+	SPICTRL=(8<<8)|8; 					// SPI control register 0 
+	SPI1CTRL=(8<<8)|8; 					// SPI control register 1 
+	UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	    // UART0 baud rate
+	UART1BAUD = (CCLK+BAUD/2)/BAUD -1;	// UART1 baud rate(modificar si se añaden otros baud rate)
+	UART2BAUD = (CCLK+BAUD/2)/BAUD -1;	// UART2 baud rate(modificar si se añaden otros baud raes)
 
 	//_delay_ms(100);
 	
@@ -298,15 +342,17 @@ void main()
 	c = UART1DAT;		// Clear RX garbage
 	c = UART2DAT;		// Clear RX garbage
 	
-	IRQVECT0=(uint32_t)irq1_handler;	
-	IRQVECT1=(uint32_t)irq2_handler;
-	IRQVECT2=(uint32_t)irq3_handler;
-	IRQVECT3=(uint32_t)irq4_handler;
-	IRQVECT4=(uint32_t)irq5_handler;
-	IRQVECT5=(uint32_t)irq6_handler;
-	IRQVECT6=(uint32_t)irq7_handler;
-	IRQVECT7=(uint32_t)irq8_handler;
-	IRQEN = (1<<2); 
+	IRQVECT0=(uint32_t)irq0_handler;	
+	IRQVECT1=(uint32_t)irq1_handler;
+	IRQVECT2=(uint32_t)irq2_handler;
+	IRQVECT3=(uint32_t)irq3_handler;
+	IRQVECT4=(uint32_t)irq4_handler;
+	IRQVECT5=(uint32_t)irq5_handler;
+	IRQVECT6=(uint32_t)irq6_handler;
+	IRQVECT7=(uint32_t)irq7_handler;
+
+	IRQEN = (1<<2); // En la versión final quizás hay que activar hay que ponerla a valor 2
+					// para activar el RX de la UART 0, es decir, IRQEN = 2;
 	
 	asm volatile ("ecall");
 	asm volatile ("ebreak");
@@ -316,7 +362,7 @@ void main()
 	while (1)
 	{
 			_puts("Command [123dx]> ");
-			char cmd = _getchUART();
+			char cmd = _getchUART0();
 			if (cmd > 32 && cmd < 127)
 				_putch(cmd);
 			_puts("\n");
@@ -324,7 +370,7 @@ void main()
 			switch (cmd)
 			{
 			case '1':
-			    _puts(menutxt);
+			    _puts(menutxt); 
 				break;
 			case '2':
 				IRQEN^=2;	// Toggle IRQ enable for UART TX

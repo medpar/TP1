@@ -13,7 +13,7 @@
     .global main, irq1_handler, irq2_handler, irq3_handler
 
     .section .boot
-reset_vec:
+	reset_vec:
     j start
 
     .section .text
@@ -22,7 +22,7 @@ reset_vec:
 ### Main program
 ######################################
 
-start:
+	start:
     li      sp, 16384
 
     # Copy data section
@@ -31,29 +31,29 @@ start:
     la      a2, _edata
     bge     a0, a2, end_init_data
 
-loop_init_data:
+	loop_init_data:
     lw      a3, 0(a1)
     sw      a3, 0(a0)
     addi    a0, a0, 4
     addi    a1, a1, 4
     blt     a0, a2, loop_init_data
 
-end_init_data:
+	end_init_data:
     # Zero-init bss section
     la      a0, _sbss
     la      a1, _ebss
     bge     a0, a1, end_init_bss
 
-loop_init_bss:
+	loop_init_bss:
     sw      zero, 0(a0)
     addi    a0, a0, 4
     blt     a0, a1, loop_init_bss
 
-end_init_bss:
+	end_init_bss:
     # Call main
     call    main
 
-loop:
+	loop:
     j       loop
 
 ##############################################################################
@@ -61,7 +61,7 @@ loop:
 ##############################################################################
 
     .globl delay_loop
-delay_loop:
+	delay_loop:
     addi    a0, a0, -1
     bnez    a0, delay_loop
     ret
