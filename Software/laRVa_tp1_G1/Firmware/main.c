@@ -11,7 +11,7 @@
 #include "moduloBME680.h"
 #include "moduloTEL0132.h"
 #include "lora_sx1262.h"
-#include "SPI.h"
+//#include "SPI.h"
 #include "moduloMCP3004.h"
 
 // Tipos de datos
@@ -24,8 +24,7 @@ typedef signed short s16;
 typedef signed int   s32;
 
 volatile int state;  
-volatile int read_CO;    
-volatile int read_CH4;
+
 
 //-- Registros mapeados
 // UART0
@@ -47,11 +46,11 @@ volatile int read_CH4;
 #define SPIDAT	 (*(volatile uint32_t*)0xE0000070)
 #define SPICTRL	 (*(volatile uint32_t*)0xE0000074)
 #define SPISTA	 (*(volatile uint32_t*)0xE0000074)
-#define SPISS	 (*(volatile uint32_t*)0xE0000078)
+//#define SPISS	 (*(volatile uint32_t*)0xE0000078)
 
 //SPI1
 #define SPI1DAT	 (*(volatile uint32_t*)0xE0000060)
-#define SPI1CTL	 (*(volatile uint32_t*)0xE0000064)
+#define SPI1CTRL (*(volatile uint32_t*)0xE0000064)
 #define SPI1STA	 (*(volatile uint32_t*)0xE0000064)
 #define SPI1SS	 (*(volatile uint32_t*)0xE0000068)
 
@@ -149,12 +148,28 @@ uint8_t _getchUART2()
 
 #define putchar(d) _putch(d)
 #include "printf.c"
-#include "modulomoduloMQ9.c"
+#include "moduloMQ9.c"
 #include "moduloBME680.c"
 #include "moduloTEL0132.c"
 #include "lora_sx1262.c"
-#include "SPI.c"
+//#include "SPI.c"
 #include "moduloMCP3004.c"
+
+
+const static char *menu="\n" 
+"------------------ 	MENU  	  -----------------\n" 
+"--------------------------------------------------\n" 
+"|                                                |\n" 
+"|    Seleccione: s -> Valores de los sensores    |\n" 
+"|    Seleccione: f -> Sensor de gases            |\n" 
+"|    Seleccione: r -> Recibir LoRa               |\n" 
+"|    Seleccione: t -> Transmitir LoRa            |\n" 
+"|    Seleccione: g -> GPS                        |\n" 
+"|    Seleccione: e -> Logo del equipo            |\n" 
+"|    Seleccione: q -> Salir                      |\n" 
+"|                                                |\n" 
+"--------------------------------------------------\n"  
+"\n\n";
 
 const static char *menutxt="\n"
 "\n\n"
@@ -168,6 +183,32 @@ const static char *menutxt="\n"
 "888888888 'Y888888 888   T88b     Y8P    'Y888888\n"
 "\nIts Alive :-)\n"
 "\n";             
+
+const static char *logo="\n" 
+"\n\n"
+"       | | | |                       ( | )  \n"
+"     +---------+                    (  |  ) \n"
+"  ---|         |                       |   \n"
+"  ---|  VIMMAC |-----------------------|   \n"
+"  ---|         |                       |   \n"
+"     +---------+                      / \  \n"
+"       | | | |                       /   \ \n"
+"											\n"
+"\n"
+"   V     V  III  M     M  M     M   AAAAA   CCCCC\n"
+"   V     V   I   MM   MM  MM   MM  A     A  C\n"
+"    V   V    I   M M M M  M M M M  AAAAAAA  C\n"
+"     V V     I   M  M  M  M  M  M  A     A  C\n"
+"      V     III  M     M  M     M  A     A  CCCCC\n"
+"\n"
+"            _____ _____ ____ _   _ \n"
+"           |_   _| ____/ ___| | | |\n"
+"             | | |  _|| |   | |_| |\n"
+"             | | | |__| |___|  _  |\n"
+"             |_| |_____\____|_| |_|\n"
+"									\n"
+"          ELECTRONICS FOR TP ONE \n"
+"\n\n"; 
 
 // Cambios Clara y Miguel
 
@@ -201,7 +242,20 @@ void __attribute__((interrupt ("machine"))) irq0_handler()
 //Timer
 void __attribute__((interrupt ("machine"))) irq1_handler()
 {
-	IRQEN = 0b00000000;
+	IRQEN=0b00000000;
+	switch(state){
+		case 0:
+			readCO();
+			break;
+		case 1:
+			readCH4();
+			break;
+		case 2:
+			printf("Medidas \n");
+			break;
+		default:
+			break;
+	}
 	
 }
 
@@ -223,8 +277,8 @@ void  __attribute__((interrupt ("machine"))) irq3_handler(){
 //UART1 RX
 void __attribute__((interrupt ("machine"))) irq4_handler()
 {
-    udat1[wrix1++] = UART1DAT;
-    wrix1 &= 31;
+	readGPS();
+    IRQEN=0b00000000;
 }
 
 
@@ -254,12 +308,18 @@ void  __attribute__((interrupt ("machine"))) irq7_handler(){
 
 
 // --------------------------------------------------------
-// REvisar esto  y sobre todo la posición
+
 uint32_t spixfer (uint32_t d)
 {
 	SPIDAT=d;
 	while(SPISTA&1);
 	return SPIDAT;
+}
+unsigned char spi1xfer (unsigned char d) 
+{ 
+SPI1DAT=d; 
+while(SPI1STA&1); 
+return SPI1DAT; 
 }
 
 // --------------------------------------------------------
@@ -322,7 +382,7 @@ void main()
 	void (*pcode)();
 	uint32_t *pi;
 	uint16_t *ps;
-	int temp,press,hum;
+	int press,hum,temp;
 /*
     UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	
 	c = UARTDAT;		// Clear RX garbage
@@ -330,6 +390,7 @@ void main()
 	IRQVECT2=(uint32_t)irq2_handler;
     IRQEN = (1<<2);
 */	
+	
 	SPICTRL=(8<<8)|8; 					// SPI control register 0 
 	SPI1CTRL=(8<<8)|8; 					// SPI control register 1 
 	UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	    // UART0 baud rate
@@ -351,9 +412,10 @@ void main()
 	IRQVECT6=(uint32_t)irq6_handler;
 	IRQVECT7=(uint32_t)irq7_handler;
 
-	IRQEN = (1<<2); // En la versión final quizás hay que activar hay que ponerla a valor 2
+	// IRQEN = (1<<2); // En la versión final quizás hay que activar hay que ponerla a valor 2
 					// para activar el RX de la UART 0, es decir, IRQEN = 2;
-	
+	IRQEN = 2;
+
 	asm volatile ("ecall");
 	asm volatile ("ebreak");
 	_puts(menutxt);
@@ -361,74 +423,97 @@ void main()
 	
 	while (1)
 	{
-			_puts("Command [123dx]> ");
-			char cmd = _getchUART0();
-			if (cmd > 32 && cmd < 127)
-				_putch(cmd);
+		_puts(menu);
+		char cmd = _getchUART0();
+	
+		if (cmd > 32 && cmd < 127)
+			_putch(cmd);
 			_puts("\n");
-
-			switch (cmd)
-			{
-			case '1':
-			    _puts(menutxt); 
-				break;
+	
+		switch (cmd)
+		{
 			case '2':
-				IRQEN^=2;	// Toggle IRQ enable for UART TX
+				IRQEN ^= 3;   // Toggle IRQ enable for UART TX
 				_delay_ms(100);
 				break;
-			case 'x':
-				_puts("Upload APP from serial port (<crtl>-F) and execute\n");
-				if(getw()!=0x66567270) break;
-				p=(uint8_t *)getw();
-				n=getw();
-				i=getw();
-				if (n) {
-					do { *p++=_getchUART(); } while(--n);
+	
+			// Transmisión del LoRa
+			case 't':
+			if(SX1262_Init()){
+				//Tenemos los mismos valores que en la parte de SC
+				_printf("Modulo LoRa iniciado\n");
+				SX1262_configSetFrequency(868000000);
+				SX1262_configSetBandwidth(4);      		// 125KHz
+				SX1262_configSetSpreadingFactor(12); 	//SF12
+				SX1262_transmit((uint8_t *)"Grupo 1", 11);
+			}
+				else
+				{
+					_printf("Error al iniciar el LoRa\n");
 				}
-
-				if (i>255) {
-					pcode=(void (*)())i;
-					pcode();
-				} 
 				break;
-			case  'c':
-				_puts("Upload APP from serial port (<crtl>-F) and execute\n");
-				if(getw1()!=0x66567270) break;
-				p=(uint8_t *)getw1();
-				n=getw1();
-				i=getw1();
-				if (n) {
-					do { *p++=_getchUART1(); } while(--n);
+	
+			// Recepción del LoRa
+			case 'r':
+				if (LoraSx1262_begin())
+				{
+					_printf("Modulo LoRa iniciado\n");
+					SX1262_configSetFrequency(868000000);
+					SX1262_configSetBandwidth(4);      	  //125 kHz
+					SX1262_configSetSpreadingFactor(12);  //SF7
+					SX1262_lora_receive_async(Buff, 500);
 				}
-
-				if (i>255) {
-					pcode=(void (*)())i;
-					pcode();
-				} 
-				break;
-			
-			case  'v':
-				_puts("Upload APP from serial port (<crtl>-F) and execute\n");
-				if(getw2()!=0x66567270) break;
-				p=(uint8_t *)getw2();
-				n=getw2();
-				i=getw2();
-				if (n) {
-					do { *p++=_getchUART2(); } while(--n);
+				else
+				{
+					_printf("Error al iniciar el LoRa\n");
 				}
-
-				if (i>255) {
-					pcode=(void (*)())i;
-					pcode();
-				} 
 				break;
+	
+			// Sensores de humedad, temperatura y presión
+			case 's':
+				startBME680();
+	
+				temp_comp  = returnTemp();
+				press_comp = returnPressure();
+				hum_comp   = returnHUMIDITY(temp_comp);
+	
+				
+				_printf("DATOS OBTENIDOS DE PRESION, TEMPERATURA Y HUMEDAD \n");
+				_printf("----------------------------------------------\n");
+				_printf("\n");
+	
+				_printf(" La temperatura es: ");
+				_printf("%02d.%d%c", temp_comp / 100, temp_comp % 100, 167);
+	
+				_printf("\n La presion es: ");
+				_printf("%d Pascuales", press_comp / 100);
+	
+				_printf("\n La humedad es: ");
+				_printf("%02d.%03d%c", hum_comp / 1000, hum_comp % 1000, 37);
+	
+				_printf("\n\n");
+				_printf("----------------------------------------------\n");
+				break;
+	
+			// GPS
+			case 'g':
+				readGPS();
+				char cmd = _getchUART0();
+				break;
+	
+			// Logo
+			case 'e':
+				_puts(logo);
+				break;
+	
 			
 			case 'q':
-				asm volatile ("jalr zero,zero");
-			case 't':
-				break;
+				return;
+	
+			// Sensor de gases
+			case 'f':
+				readGas();
+	
 			default:
-				continue;
-			}
-	}
+				continue;	
 }
