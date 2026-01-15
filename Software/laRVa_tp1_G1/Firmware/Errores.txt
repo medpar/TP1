@@ -1,0 +1,90 @@
+moduloBME680.c: In function 'readBME680':
+moduloBME680.c:73:14: error: void value not ignored as it ought to be
+   73 |     readDATA = spixfer(0);          // Enviamos 0
+      |              ^
+In file included from main.c:154:
+lora_sx1262.c: In function 'SX1262_Init':
+lora_sx1262.c:120:2: error: 'MAX_COUNT' undeclared (first use in this function)
+  120 |  MAX_COUNT = 0xFFFFFFFF;
+      |  ^~~~~~~~~
+lora_sx1262.c:120:2: note: each undeclared identifier is reported only once for each function it appears in
+lora_sx1262.c:84:32: error: 'LORA_RESET' undeclared (first use in this function); did you mean 'LORA_RESET_1'?
+   84 | #define LORA_RESET_0 GPOUT &= ~LORA_RESET; // LORA_RESET bajo
+      |                                ^~~~~~~~~~
+lora_sx1262.c:123:2: note: in expansion of macro 'LORA_RESET_0'
+  123 |  LORA_RESET_0;
+      |  ^~~~~~~~~~~~
+lora_sx1262.c: In function 'SX1262_transmit':
+lora_sx1262.c:86:32: error: 'L_RX' undeclared (first use in this function)
+   86 | #define LORA_RX_0    GPOUT &= ~L_RX;       // LORA_RX  bajo
+      |                                ^~~~
+lora_sx1262.c:234:3: note: in expansion of macro 'LORA_RX_0'
+  234 |   LORA_RX_0;
+      |   ^~~~~~~~~
+lora_sx1262.c:87:32: error: 'L_TX' undeclared (first use in this function)
+   87 | #define LORA_TX_1    GPOUT |=  L_TX;       // LORA_TX  alto
+      |                                ^~~~
+lora_sx1262.c:235:3: note: in expansion of macro 'LORA_TX_1'
+  235 |   LORA_TX_1;
+      |   ^~~~~~~~~
+lora_sx1262.c: In function 'SX1262_setModeReceive':
+lora_sx1262.c:85:32: error: 'L_RX' undeclared (first use in this function)
+   85 | #define LORA_RX_1    GPOUT |=  L_RX;       // LORA_RX  alto
+      |                                ^~~~
+lora_sx1262.c:343:3: note: in expansion of macro 'LORA_RX_1'
+  343 |   LORA_RX_1;
+      |   ^~~~~~~~~
+lora_sx1262.c:88:32: error: 'L_TX' undeclared (first use in this function)
+   88 | #define LORA_TX_0    GPOUT &= ~L_TX;       // LORA_TX  bajo
+      |                                ^~~~
+lora_sx1262.c:344:3: note: in expansion of macro 'LORA_TX_0'
+  344 |   LORA_TX_0;
+      |   ^~~~~~~~~
+In file included from main.c:156:
+moduloMCP3004.c: In function 'readMCP3004':
+moduloMCP3004.c:8:14: error: void value not ignored as it ought to be
+    8 |         aux1 = spixfer(channel);        // Byte de seleccion de canal
+      |              ^
+moduloMCP3004.c:9:14: error: void value not ignored as it ought to be
+    9 |         aux2 = spixfer(0x00);                   // Dummy byte para seguir recibiendo informaci├│n
+      |              ^
+main.c: At top level:
+main.c:211:7: warning: unknown escape sequence: '\040'
+  211 | "\n\n";
+      |       ^
+main.c:211:7: warning: unknown escape sequence: '\040'
+main.c:211:7: warning: unknown escape sequence: '\_'
+main.c:312:10: error: conflicting types for 'spixfer'; have 'uint32_t(uint32_t)' {aka 'long unsigned int(long unsigned int)'}
+  312 | uint32_t spixfer (uint32_t d)
+      |          ^~~~~~~
+moduloBME680.c:4:13: note: previous declaration of 'spixfer' with type 'void(uint8_t)' {aka 'void(unsigned char)'}
+    4 | extern void spixfer(uint8_t data);
+      |             ^~~~~~~
+main.c:333:10: error: conflicting types for 'getw'; have 'uint32_t()' {aka 'long unsigned int()'}
+  333 | uint32_t getw()
+      |          ^~~~
+In file included from main.c:6:
+c:\tp1_rv32e\tools\xpack-risc_v\riscv-none-elf\include\stdio.h:354:9: note: previous declaration of 'getw' with type 'int(FILE *)'
+  354 | int     getw (FILE *);
+      |         ^~~~
+main.c: In function 'main':
+main.c:458:37: warning: implicit declaration of function 'LoraSx1262_begin' [-Wimplicit-function-declaration]
+  458 |                                 if (LoraSx1262_begin())
+      |                                     ^~~~~~~~~~~~~~~~
+main.c:464:67: error: 'Buff' undeclared (first use in this function)
+  464 |                                         SX1262_lora_receive_async(Buff, 500);
+      |                                                                   ^~~~
+main.c:476:33: error: 'temp_comp' undeclared (first use in this function)
+  476 |                                 temp_comp  = returnTemp();
+      |                                 ^~~~~~~~~
+main.c:477:33: error: 'press_comp' undeclared (first use in this function)
+  477 |                                 press_comp = returnPressure();
+      |                                 ^~~~~~~~~~
+main.c:478:33: error: 'hum_comp' undeclared (first use in this function)
+  478 |                                 hum_comp   = returnHUMIDITY(temp_comp);
+      |                                 ^~~~~~~~
+main.c:519:1: error: expected declaration or statement at end of input
+  519 | }
+      | ^
+main.c:519:1: error: expected declaration or statement at end of input
+make: *** [code.elf] Error 1
