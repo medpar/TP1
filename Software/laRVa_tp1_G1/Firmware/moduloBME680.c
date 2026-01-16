@@ -1,8 +1,7 @@
 #include <stdint.h>
 
 // Funciones de comunicación SPI (declaraciones externas)
-extern void spixfer(uint8_t data);
-extern uint8_t SPISS;
+extern uint8_t spixfer(uint8_t data);
 
 // Definiciones de registros BME680 (deberían estar en un header)
 #define RESET_BME       0xE0
@@ -12,7 +11,9 @@ extern uint8_t SPISS;
 #define CTRL_GAS_1      0x71
 #define gas_wait0       0x64
 #define res_heat0       0x5A
-#define CS_BME680       0x01
+#define CS_BME680       0b10
+
+static int32_t bme680_t_fine = 0;
 
 /**
  * @brief Inicializa el módulo BME680
@@ -103,6 +104,7 @@ int returnTemp(void) {
     var2 = (var1 * (int32_t)par_t2) >> 11;
     var3 = ((((var1 >> 1) * (var1 >> 1)) >> 12) * ((int32_t)par_t3 << 4)) >> 14;
     t_fine = var2 + var3;
+    bme680_t_fine = t_fine;
     temp_comp = ((t_fine * 5) + 128) >> 8;
     
     return temp_comp;
@@ -117,7 +119,8 @@ int returnPressure(void) {
     int32_t par_p1, par_p2, par_p3, par_p4, par_p5;
     int32_t par_p6, par_p7, par_p8, par_p9, par_p10;
     int32_t press_adc, press_comp;
-    int32_t var1, var2, var3, t_fine;
+    int32_t var1, var2, var3;
+    int32_t t_fine = bme680_t_fine;
     
     // Entramos a la página 0 de los registros
     writeBME680(0x00, STATUS_BME);

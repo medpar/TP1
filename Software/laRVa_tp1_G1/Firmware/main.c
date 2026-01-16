@@ -1,10 +1,6 @@
 
 
 #include <stdint.h>
-#include <time.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 
 // Modulos externos
 #include "moduloMQ9.h"
@@ -46,7 +42,7 @@ volatile int state;
 #define SPIDAT	 (*(volatile uint32_t*)0xE0000070)
 #define SPICTRL	 (*(volatile uint32_t*)0xE0000074)
 #define SPISTA	 (*(volatile uint32_t*)0xE0000074)
-//#define SPISS	 (*(volatile uint32_t*)0xE0000078)
+#define SPISS	 (*(volatile uint32_t*)0xE0000078)
 
 //SPI1
 #define SPI1DAT	 (*(volatile uint32_t*)0xE0000060)
@@ -56,11 +52,16 @@ volatile int state;
 
 
 // TIMER
-#define TIMER     (*(volatile uint32_t*)0xE0000040) 
+#define MAX_COUNT (*(volatile uint32_t*)0xE0000040)
+#define TIMER     (*(volatile uint32_t*)0xE0000040)
 
 
-#define GPOUT  (*(volatile uint8_t*)0xE0000030) 
-#define GPIN   (*(volatile uint8_t*)0xE0000034) 
+#define GPOUT  (*(volatile uint32_t*)0xE0000030)
+#define GPIN   (*(volatile uint32_t*)0xE0000034)
+
+#define LORA_RESET  (1U << 10)
+#define L_RX        (1U << 9)
+#define L_TX        (1U << 8)
 
 
 //IRQs vectors
@@ -114,6 +115,8 @@ volatile uint8_t rdix1, wrix1; 	//Read index and write index
 
 uint8_t udat2[32]; 				//FIFO UART2
 volatile uint8_t rdix2, wrix2; 	//Read index and write index	
+
+static uint8_t lora_rx_buffer[256];
 
 //Read of UART0
 uint8_t _getchUART0()
@@ -191,8 +194,8 @@ const static char *logo="\n"
 "  ---|         |                       |   \n"
 "  ---|  VIMMAC |-----------------------|   \n"
 "  ---|         |                       |   \n"
-"     +---------+                      / \  \n"
-"       | | | |                       /   \ \n"
+"     +---------+                      / \\  \n"
+"       | | | |                       /   \\ \n"
 "											\n"
 "\n"
 "   V     V  III  M     M  M     M   AAAAA   CCCCC\n"
@@ -205,7 +208,7 @@ const static char *logo="\n"
 "           |_   _| ____/ ___| | | |\n"
 "             | | |  _|| |   | |_| |\n"
 "             | | | |__| |___|  _  |\n"
-"             |_| |_____\____|_| |_|\n"
+"             |_| |_____\\____|_| |_|\n"
 "									\n"
 "          ELECTRONICS FOR TP ONE \n"
 "\n\n"; 
@@ -251,7 +254,7 @@ void __attribute__((interrupt ("machine"))) irq1_handler()
 			readCH4();
 			break;
 		case 2:
-			printf("Medidas \n");
+			_printf("Medidas \n");
 			break;
 		default:
 			break;
@@ -309,13 +312,13 @@ void  __attribute__((interrupt ("machine"))) irq7_handler(){
 
 // --------------------------------------------------------
 
-uint32_t spixfer (uint32_t d)
+uint8_t spixfer (uint8_t d)
 {
 	SPIDAT=d;
 	while(SPISTA&1);
 	return SPIDAT;
 }
-unsigned char spi1xfer (unsigned char d) 
+uint8_t spi1xfer (uint8_t d) 
 { 
 SPI1DAT=d; 
 while(SPI1STA&1); 
@@ -382,7 +385,7 @@ void main()
 	void (*pcode)();
 	uint32_t *pi;
 	uint16_t *ps;
-	int press,hum,temp;
+	int temp_comp, press_comp, hum_comp;
 /*
     UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	
 	c = UARTDAT;		// Clear RX garbage
@@ -445,7 +448,7 @@ void main()
 				SX1262_configSetFrequency(868000000);
 				SX1262_configSetBandwidth(4);      		// 125KHz
 				SX1262_configSetSpreadingFactor(12); 	//SF12
-				SX1262_transmit((uint8_t *)"Grupo 1", 11);
+				SX1262_transmit((uint8_t *)"Grupo 1", (int)(sizeof("Grupo 1") - 1));
 			}
 				else
 				{
@@ -455,13 +458,30 @@ void main()
 	
 			// Recepción del LoRa
 			case 'r':
-				if (LoraSx1262_begin())
+				if (SX1262_Init())
 				{
 					_printf("Modulo LoRa iniciado\n");
 					SX1262_configSetFrequency(868000000);
 					SX1262_configSetBandwidth(4);      	  //125 kHz
-					SX1262_configSetSpreadingFactor(12);  //SF7
-					SX1262_lora_receive_async(Buff, 500);
+					SX1262_configSetSpreadingFactor(12);  //SF12
+					n = SX1262_lora_receive_async(lora_rx_buffer, sizeof(lora_rx_buffer));
+					if (n > 0)
+					{
+						_printf("Paquete recibido (%d bytes): ", n);
+						for (i = 0; i < (unsigned int)n; i++)
+						{
+							_putch(lora_rx_buffer[i]);
+						}
+						_puts("\n");
+					}
+					else if (n == 0)
+					{
+						_printf("Paquete vacio\n");
+					}
+					else
+					{
+						_printf("No hay paquete\n");
+					}
 				}
 				else
 				{
@@ -498,7 +518,7 @@ void main()
 			// GPS
 			case 'g':
 				readGPS();
-				char cmd = _getchUART0();
+				_getchUART0();
 				break;
 	
 			// Logo
@@ -513,7 +533,10 @@ void main()
 			// Sensor de gases
 			case 'f':
 				readGas();
+				break;
 	
 			default:
 				continue;	
+		}
+	}
 }
