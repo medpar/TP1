@@ -223,10 +223,10 @@ static void debug_sensors(void)
 static void lora_stream_send(void)
 {
 	int temp_comp, press_comp, hum_comp;
-	char lat[24];
-	char lon[24];
-	char payload[180];
-	uint32_t msg_id = 0;
+	int lat_micro = 0;
+	int lon_micro = 0;
+	char payload[160];
+	unsigned int msg_id = 0;
 
 	_puts("Envio LoRa continuo (pulsa cualquier tecla para volver al menu)\n");
 
@@ -244,30 +244,30 @@ static void lora_stream_send(void)
 			_getchUART0();
 			break;
 		}
-		lat[0] = '\0';
-		lon[0] = '\0';
 		startBME680();
 		temp_comp  = returnTemp();
 		press_comp = returnPressure();
 		hum_comp   = returnHUMIDITY(temp_comp);
 
-		if (!GPS_ReadLatLon(lat, (int)sizeof(lat), lon, (int)sizeof(lon))) {
-			lat[0] = '0'; lat[1] = '\0';
-			lon[0] = '0'; lon[1] = '\0';
+		if (!GPS_ReadLatLonMicro(&lat_micro, &lon_micro)) {
+			lat_micro = 0;
+			lon_micro = 0;
 		}
 
 		payload[0] = '\0';
 		int len = _sprintf(payload,
-		                   "Grupo 1 , T= %02d.%02d, H= %d, P= %d, LAT=%s, LON=%s",
+		                   "	| Grupo 1, T= %2d.%02d, H= %2d.%03d %%, P=%d, LAT = %10d, LON = %10d",
 		                   temp_comp/100, temp_comp%100,
-		                   hum_comp, press_comp,
-		                   lat, lon);
+		                   hum_comp/1000, hum_comp%1000,
+		                   press_comp,
+		                   lat_micro, lon_micro);
 		if (len < 0) len = 0;
-		_printf("TX: %s\n", payload);
+		if (len >= (int)sizeof(payload)) len = (int)sizeof(payload) - 1;
+		payload[len] = '\0';
 
 		SX1262_transmit((uint8_t *)payload, len);
 		SX1262_readPacketStatus();
-		_printf("rssi %4d, snr %4d :# 1 %3lu %s\n",
+		_printf("rssi %4d, snr %4d ## %5u %s\n",
 		        SX1262_rssi, SX1262_snr, (unsigned long)msg_id, payload);
 		msg_id++;
 		_delay_ms(1000);
@@ -307,7 +307,30 @@ const static char *menu="\n"
 
 const static char *menutxt="TP1 Grupo1 - laRVa IoT logger\n";
 
-const static char *logo="TP1 Grupo1\n";
+const static char *logo="\n\n"
+"       | | | |                       ( | )  \n"
+"     +---------+                    (  |  ) \n"
+"  ---|         |                       |   \n"
+"  ---|  VIMMAC |-----------------------|   \n"
+"  ---|         |                       |   \n"
+"     +---------+                      / \\  \n"
+"       | | | |                       /   \\ \n"
+"											\n"
+"\n"
+"   V     V  III  M     M  M     M   AAAAA   CCCCC\n"
+"   V     V   I   MM   MM  MM   MM  A     A  C\n"
+"    V   V    I   M M M M  M M M M  AAAAAAA  C\n"
+"     V V     I   M  M  M  M  M  M  A     A  C\n"
+"      V     III  M     M  M     M  A     A  CCCCC\n"
+"\n"
+"            _____ _____ ____ _   _ \n"
+"           |_   _| ____/ ___| | | |\n"
+"             | | |  _|| |   | |_| |\n"
+"             | | | |__| |___|  _  |\n"
+"             |_| |_____\\____|_| |_|\n"
+"									\n"
+"        	TP1 ELECTRONICS\n"
+"\n\n";
 
 // Cambios Clara y Miguel
 
@@ -524,28 +547,23 @@ void main()
 			case 'r':
 				if (SX1262_Init())
 				{
-					_printf("Modulo LoRa iniciado\n");
+					_printf("Modo recepcion LoRa (tecla para salir)\n");
 					SX1262_configSetFrequency(868000000);
 					SX1262_configSetBandwidth(4);      	  //125 kHz
 					SX1262_configSetSpreadingFactor(7);  //SF7
-					n = SX1262_lora_receive_async(lora_rx_buffer, sizeof(lora_rx_buffer));
-					if (n > 0)
-					{
-						_printf("Paquete recibido (%d bytes): ", n);
-						for (i = 0; i < (unsigned int)n; i++)
+
+					while (!hascharUART0()) {
+						n = SX1262_lora_receive_async(lora_rx_buffer, sizeof(lora_rx_buffer));
+						if (n > 0)
 						{
-							_putch(lora_rx_buffer[i]);
+							_printf("Paquete recibido (%d bytes): ", n);
+							for (i = 0; i < (unsigned int)n; i++)
+								_putch(lora_rx_buffer[i]);
+							_puts("\n");
 						}
-						_puts("\n");
+						_delay_ms(200);
 					}
-					else if (n == 0)
-					{
-						_printf("Paquete vacio\n");
-					}
-					else
-					{
-						_printf("No hay paquete\n");
-					}
+					_getchUART0(); // limpiar la tecla
 				}
 				else
 				{
@@ -588,7 +606,7 @@ void main()
 			// Sensor de polvo GP2Y1010
 			case 'p': {
 				int raw = GP2Y1010_ReadRaw(MCP3004_CH1);
-				_printf("GP2Y1010 ADC raw: %d (0-1023, mayor -> mas polvo)\n", raw);
+				_printf("GP2Y1010 ADC raw (0-1023): %d \n", raw);
 				break;
 			}
 			// Lectura ADC directa
@@ -634,3 +652,4 @@ void main()
 		}
 	}
 }
+

@@ -94,8 +94,38 @@ static int read_nmea_line(char *line, int line_len)
 
 static int nmea_to_microdeg(const char *nmea, char dir, int *out_micro)
 {
-	(void)nmea; (void)dir; (void)out_micro;
-	return 0;
+	if (!nmea || !out_micro || nmea[0] == '\0') return 0;
+
+	int int_part = 0;
+	int frac_part = 0;
+	int frac_mul = 1;
+	const char *p = nmea;
+	while (*p && *p != '.') {
+		if (*p < '0' || *p > '9') return 0;
+		int_part = int_part * 10 + (*p - '0');
+		p++;
+	}
+	if (*p == '.') {
+		p++;
+		while (*p && frac_mul < 10000) { // hasta 4 decimales
+			if (*p < '0' || *p > '9') break;
+			frac_part = frac_part * 10 + (*p - '0');
+			frac_mul *= 10;
+			p++;
+		}
+		while (frac_mul < 10000) { frac_part *= 10; frac_mul *= 10; }
+	}
+
+	int deg = int_part / 100;
+	int minutes = int_part % 100;
+	int minutes_milli = minutes * 10000 + frac_part; // mm.mmmm escalado
+
+	long micro = (long)deg * 1000000L;
+	micro += (long)minutes_milli * 5L / 3L; // (1e6/600000) = 5/3
+
+	int sign = (dir == 'S' || dir == 's' || dir == 'W' || dir == 'w') ? -1 : 1;
+	*out_micro = (int)(sign * micro);
+	return 1;
 }
 
 int GPS_ReadLatLon(char *lat, int lat_len, char *lon, int lon_len)
@@ -115,6 +145,30 @@ int GPS_ReadLatLon(char *lat, int lat_len, char *lon, int lon_len)
 	return 0;
 }
 
+int GPS_ReadLatLonMicro(int *lat_micro, int *lon_micro)
+{
+	char line[128];
+	char lat[24] = {0};
+	char lon[24] = {0};
+	char lat_dir = 'N';
+	char lon_dir = 'E';
+	uint32_t start_all = TIMER;
+	uint32_t timeout_all = (CCLK / 1000u) * 1500u; // 1.5s
+
+	while ((uint32_t)(TIMER - start_all) < timeout_all) {
+		if (!read_nmea_line(line, (int)sizeof(line))) continue;
+		char work[128];
+		copy_field(work, (int)sizeof(work), line);
+		if (parse_gga(work, lat, (int)sizeof(lat), lon, (int)sizeof(lon), &lat_dir, &lon_dir)) {
+			if (nmea_to_microdeg(lat, lat_dir, lat_micro) &&
+			    nmea_to_microdeg(lon, lon_dir, lon_micro)) {
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
 void readGPS(void)
 {
 	char line[128];
@@ -122,6 +176,8 @@ void readGPS(void)
 	char lon[24] = {0};
 	char lat_dir = '?';
 	char lon_dir = '?';
+	int lat_micro = 0;
+	int lon_micro = 0;
 
 	uint32_t start_all = TIMER;
 	uint32_t timeout_all = (CCLK / 1000u) * 3000u; // 3s
@@ -140,6 +196,14 @@ void readGPS(void)
 	if (lat[0] && lon[0]) {
 		_printf("Lat: %s %c\n", lat, lat_dir);
 		_printf("Lon: %s %c\n", lon, lon_dir);
+		if (nmea_to_microdeg(lat, lat_dir, &lat_micro) &&
+		    nmea_to_microdeg(lon, lon_dir, &lon_micro)) {
+			int lat_abs = (lat_micro < 0) ? -lat_micro : lat_micro;
+			int lon_abs = (lon_micro < 0) ? -lon_micro : lon_micro;
+			_printf("Lat dec: %d.%06d\n", lat_micro/1000000, lat_abs%1000000);
+			_printf("Lon dec: %d.%06d\n", lon_micro/1000000, lon_abs%1000000);
+			//_printf("Coordenadas decimales: %d, %d\n", lat_micro/1000000, lon_micro/1000000);
+		}
 	} else {
 		_printf("GPS: sin datos GGA validos\n");
 	}
