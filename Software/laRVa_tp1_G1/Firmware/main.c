@@ -213,6 +213,7 @@ static void debug_sensors(void)
 #include "lora_sx1262.c"
 //#include "SPI.c"
 #include "moduloMCP3004.c"
+#include "moduloGP2Y1010.c"
 
 
 const static char *menu="\n" 
