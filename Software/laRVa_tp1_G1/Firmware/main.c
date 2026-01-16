@@ -9,6 +9,7 @@
 #include "lora_sx1262.h"
 //#include "SPI.h"
 #include "moduloMCP3004.h"
+#include "moduloGP2Y1010.h"
 
 // Tipos de datos
 typedef unsigned char  u8;
@@ -167,6 +168,42 @@ void *memcpy(void *dst, const void *src, unsigned int n)
 	return dst;
 }
 
+extern int _printf(const char *format, ...);
+
+static void debug_sensors(void)
+{
+	int temp_comp, press_comp, hum_comp;
+	int adc0, adc1, adc2, adc3;
+	int co_ppm, ch4_ppm;
+	int dust_raw;
+
+	startBME680();
+	temp_comp  = returnTemp();
+	press_comp = returnPressure();
+	hum_comp   = returnHUMIDITY(temp_comp);
+
+	adc0 = MCP3004_Read(MCP3004_CH0);
+	adc1 = MCP3004_Read(MCP3004_CH1);
+	adc2 = MCP3004_Read(MCP3004_CH2);
+	adc3 = MCP3004_Read(MCP3004_CH3);
+
+	co_ppm  = MQ9_ReadCOppm(MCP3004_CH0);
+	ch4_ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
+
+	dust_raw = GP2Y1010_ReadRaw(MCP3004_CH1);
+
+	_printf("\n------ DEBUG SENSORES ------\n");
+	_printf("BME680 T=%02d.%02d C, P=%d Pa, H=%02d.%03d %%\n",
+	        temp_comp/100, temp_comp%100,
+	        press_comp,
+	        hum_comp/1000, hum_comp%1000);
+	_printf("ADC CH0=%d CH1=%d CH2=%d CH3=%d\n", adc0, adc1, adc2, adc3);
+	_printf("MQ9 CO=%d ppm, CH4=%d ppm\n", co_ppm, ch4_ppm);
+	_printf("GP2Y1010 raw=%d\n", dust_raw);
+	_printf("----------------------------\n");
+	readGPS();
+}
+
 
 #define putchar(d) _putch(d)
 #include "printf.c"
@@ -187,6 +224,7 @@ const static char *menu="\n"
 "|    Seleccione: r -> Recibir LoRa               |\n" 
 "|    Seleccione: t -> Transmitir LoRa            |\n" 
 "|    Seleccione: g -> GPS                        |\n" 
+"|    Seleccione: d -> Debug de sensores          |\n" 
 "|    Seleccione: e -> Logo del equipo            |\n" 
 "|    Seleccione: q -> Salir                      |\n" 
 "|                                                |\n" 
@@ -542,6 +580,11 @@ void main()
 			case 'g':
 				readGPS();
 				_getchUART0();
+				break;
+
+			// Debug completo
+			case 'd':
+				debug_sensors();
 				break;
 	
 			// Logo

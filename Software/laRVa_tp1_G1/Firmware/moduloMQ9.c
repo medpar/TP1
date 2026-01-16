@@ -21,6 +21,20 @@ static int mq9_ppm_from_scaled(int scaled, int div)
 	return (10 * scaled) / div;
 }
 
+int MQ9_ReadCOppm(uint8_t channel)
+{
+	int raw = MCP3004_Read(channel);
+	int scaled = mq9_scale_adc(raw);
+	return mq9_ppm_from_scaled(scaled, MQ9_CO_DIV);
+}
+
+int MQ9_ReadCH4ppm(uint8_t channel)
+{
+	int raw = MCP3004_Read(channel);
+	int scaled = mq9_scale_adc(raw);
+	return mq9_ppm_from_scaled(scaled, MQ9_CH4_DIV);
+}
+
 void readGas(void)
 {
 	state = 0;
@@ -31,9 +45,7 @@ void readGas(void)
 
 void readCO(void)
 {
-	int gas_CO = MCP3004_Read(MCP3004_CH0);
-	int scaled = mq9_scale_adc(gas_CO);
-	int read_CO = mq9_ppm_from_scaled(scaled, MQ9_CO_DIV);
+	int read_CO = MQ9_ReadCOppm(MCP3004_CH0);
 
 	DISABLE_5V_1V4;
 	ENABLE_1V4;
@@ -50,9 +62,7 @@ void readCO(void)
 
 void readCH4(void)
 {
-	int gas_CH4 = MCP3004_Read(MCP3004_CH0);
-	int scaled = mq9_scale_adc(gas_CH4);
-	int read_CH4 = mq9_ppm_from_scaled(scaled, MQ9_CH4_DIV);
+	int read_CH4 = MQ9_ReadCH4ppm(MCP3004_CH0);
 
 	DISABLE_5V_1V4;
 
