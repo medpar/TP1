@@ -415,9 +415,8 @@ void main()
 	IRQVECT6=(uint32_t)irq6_handler;
 	IRQVECT7=(uint32_t)irq7_handler;
 
-	// IRQEN = (1<<2); // En la versión final quizás hay que activar hay que ponerla a valor 2
-					// para activar el RX de la UART 0, es decir, IRQEN = 2;
-	IRQEN = 2;
+	// Habilitar IRQ de RX en UART0 (bit 2).
+	IRQEN = (1 << 2);
 
 	asm volatile ("ecall");
 	asm volatile ("ebreak");

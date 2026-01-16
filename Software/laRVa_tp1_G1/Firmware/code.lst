@@ -2549,7 +2549,7 @@ Disassembly of section .text:
     2584:	00e7ac23          	sw	a4,24(a5)
     2588:	1d400713          	li	a4,468
     258c:	00e7ae23          	sw	a4,28(a5)
-    2590:	00200713          	li	a4,2
+    2590:	00400713          	li	a4,4
     2594:	02e7a023          	sw	a4,32(a5)
     2598:	00000073          	ecall
     259c:	00100073          	ebreak
