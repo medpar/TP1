@@ -138,8 +138,8 @@ IO register map (all registers accessed as 32-bit words):
 
 `include "laRVa.v"
 `include "uart.v"
-
-
+`include "spi.v"
+`include "timer.v"
 	
 module SYSTEM (
 	input clk,		// Main clock input 25MHz
@@ -153,10 +153,25 @@ module SYSTEM (
 	output txd_1,
 
 	input  rxd_2,// UART2
-	output txd_2
+	output txd_2,
+    
+    output sck,  // SPI0
+    output mosi, 
+    input  miso,  
+  
+    output sck1, //SPI1 
+    input miso1,  
+    output mosi1, 
+  
+    output reg [31:0] gpout, //GPOUT 
+    input [31:0] gpin, 
+  
+    output ADC_CS, 
+    output BME_CS, 
+    output LORA_CS 
 );
 
-wire		cclk;	// CPU clock
+wire	cclk;	    // CPU clock
 assign	cclk=clk;
 
 ///////////////////////////////////////////////////////
@@ -217,11 +232,6 @@ ram32 ram0 (
 //////////////////////////////////////////////////
 ////////////////// Peripherals ///////////////////
 //////////////////////////////////////////////////
-reg [31:0]tcount=0;
-always @(posedge clk or posedge reset) begin
-	if (reset) tcount<=0;
-	else tcount<=tcount+1;
-end
 
 
 
@@ -235,7 +245,11 @@ wire uart2cs;	// UART2	at offset 0xA0
 wire spics;		// SPI	(no implementado)
 wire irqcs;		// IRQ control at offset 0x00-0x1F
 wire irqcsen;	// IRQ control at offset 0x20
-				
+wire timercs;
+wire spi0cs;
+wire spi1cs;
+wire gpoutcs;
+
 assign uart0cs = iocs&(ca[7:4]==4'b1000);  // 0xE0000080-0xE000008F
 assign uart1cs = iocs&(ca[7:4]==4'b1001);  // 0xE0000090-0xE000009F
 assign uart2cs = iocs&(ca[7:4]==4'b1010);  // 0xE00000A0-0xE00000AF
@@ -243,27 +257,57 @@ assign uart2cs = iocs&(ca[7:4]==4'b1010);  // 0xE00000A0-0xE00000AF
 //assign spics  = iocs&(ca[7:5]==3'b011);  // No implementado
 assign irqcs   = iocs&(ca[7:5]==3'b000);    // 0xE0000000-0xE000001F
 assign irqcsen = iocs&(ca[7:4]==4'b0010);   // 0xE0000020-0xE000002F
-
+assign spi0cs  = iocs&(ca[7:4]==4'b0111);   //0x70 
+assign spi1cs  = iocs&(ca[7:4]==4'b0110);   //0x60 
+assign timercs = iocs&(ca[7:4]==4'b0100);   //0x40 
+assign gpoutcs = iocs&(ca[7:4]==4'b0011);   //0x30 
 // Peripheral output bus mux
+
 reg [31:0]iodo;	// Not a register
+
 always@*
  casex (ca[7:2])
- 
-	6'b100000: iodo<={24'hx,uart0_do};         // UART0 RX data
-	6'b100001: iodo<={27'hx,ove0,fe0,tend0,thre0,dv0}; // UART0 flags
-	6'b100100: iodo<={24'hx,uart1_do};         // UART1 RX data
-	6'b100101: iodo<={27'hx,ove1,fe1,tend1,thre1,dv1}; // UART1 flags
-	6'b101000: iodo<={24'hx,uart2_do};         // UART2 RX data
-	6'b101001: iodo<={27'hx,ove2,fe2,tend2,thre2,dv2}; // UART2 flags
-	6'b010000: iodo<=tcount;                   // Timer counter
+    // UARTs
+	
+	6'b1000x0: iodo<={24'hx,uart0_do};         // UART0 RX data
+	6'b1000x1: iodo<={27'hx,ove0,fe0,tend0,thre0,dv0}; // UART0 flags
+	6'b1001x0: iodo<={24'hx,uart1_do};         // UART1 RX data
+	6'b1001x1: iodo<={27'hx,ove1,fe1,tend1,thre1,dv1}; // UART1 flags
+	6'b1010x0: iodo<={24'hx,uart2_do};         // UART2 RX data
+	6'b1010x1: iodo<={27'hx,ove2,fe2,tend2,thre2,dv2}; // UART2 flags
+	
+	
+	 // SPI0: 0xE0000070 (RX), 0xE0000074 (flags)
+    6'b011100: iodo <= spirx;               // SPI0 RX data
+    6'b011101: iodo <= {31'h0, busy};       // SPI0 flags (BUSY)
+
+    // SPI1: 0xE0000060 (RX), 0xE0000064 (flags)
+    6'b011000: iodo <= spirx1;              // SPI1 RX data
+    6'b011001: iodo <= {31'h0, busy1};      // SPI1 flags
+
+    // GPOUT / GPIN: 0xE0000030, 0xE0000034
+    6'b001100: iodo <= {24'h0, gpout};      // GPOUT
+    6'b001101: iodo <= {24'h0, gpin};       // GPIN
+
+    // TIMER / IRQ enable: 0xE0000040, 0xE0000020
+    6'b010000: iodo<=tcount;                   // Timer counter
 	6'b001000: iodo<={24'hx,irqen};            // Interrupt enable
 
-	default:  iodo <= 32'h0;
+	default:  iodo <= 32'hxxxxxxxx;
 		
- endcase
+ endcase //comprobado !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+ //GPOUT Register CHANGED (revisar)
+always @(posedge clk) 
+    begin 
+        if (gpoutcs & mwe[0]) 
+            begin 
+                gpout <= cdo[31:0]; 
+            end 
+    end 
 
 /////////////////////////////
-// UART0
+// UART0 modificado CLAMIG
 
 wire tend0,thre0,dv0,fe0,ove0; // UART0 Flags
 
@@ -327,15 +371,123 @@ assign urd2     = uart2cs & (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flags
 UART_CORE #(.BAUDBITS(12)) uart2 ( .clk(cclk), .txd(txd_2), .rxd(rxd_2), 
 	.d(cdo[15:0]), .wrtx(uwrtx2), .wrbaud(uwrbaud2), .rd(urd2), .q(uart2_do),
 	.dv(dv2), .fe(fe2), .ove(ove2), .tend(tend2), .thre(thre2) );
+	
+	
+//comprobado!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+
+/////////////////////////////    
+// SPI0
+wire spitx;     // SPI write 
+wire spictrl; 
+wire spisswr; 
+wire busy;     // SPI flag 
+reg [13:0] spicontrol;  // SPI Control  
+wire [31:0] spirx; 
+reg [1:0] spi_ss= 2'b11; // SPI Slave Select 
+
+// Decodificación de direcciones SPI0:
+// 0xE0000070 (0x70 = 8'b0111_0000) → ca[4:2] = 3'b000 → TX data
+// 0xE0000074 (0x74 = 8'b0111_0100) → ca[4:2] = 3'b001 → Control
+// 0xE0000078 (0x78 = 8'b0111_1000) → ca[4:2] = 3'b010 → Slave Select
+
+assign spitx   = spi0cs & (~ca[4]) & (~ca[3]) & (~ca[2]) & (mwe==4'b1111); 
+assign spictrl = spi0cs & (~ca[4]) & (~ca[3]) & ( ca[2]) & (mwe==4'b1111);  
+assign spisswr = spi0cs & (~ca[4]) & ( ca[3]) & (~ca[2]) & (mwe==4'b1111);  
+ 
+always @(posedge cclk or posedge reset) 
+ begin 
+  if (reset) begin
+    spicontrol <= 14'h0;
+    spi_ss <= 2'b11;
+  end else begin
+    if (spictrl) 
+      spicontrol <= cdo[13:0]; 
+    if (spisswr) 
+      spi_ss <= cdo[1:0]; 
+  end
+ end 
+  
+assign BME_CS = spi_ss[0]; 
+assign ADC_CS = spi_ss[1]; 
+// LORA_CS se conectará a SPI1 cuando esté implementado
+
+SPI_master spi0 (.clk(cclk), .miso(miso), .wr(spitx), .din(cdo),  
+ .divider(spicontrol[7:0]), .bits(spicontrol[13:8]), .sck(sck), 
+.mosi(mosi), 
+ .busy(busy), .dout(spirx) );
+
+ 
+///////////////////////////// 
+// SPI1 (LORA)
+wire spitx1;   
+wire spictrl1; 
+wire spisswr1; 
+wire busy1; 
+reg [13:0] spicontrol1; 
+wire [31:0] spirx1; 
+reg spi_ss1 = 1'b1; 
+
+// Decodificación de direcciones SPI1:
+// 0xE0000060 (0x60 = 8'b0110_0000) → ca[4:2] = 3'b000 → TX data
+// 0xE0000064 (0x64 = 8'b0110_0100) → ca[4:2] = 3'b001 → Control
+// 0xE0000068 (0x68 = 8'b0110_1000) → ca[4:2] = 3'b010 → Slave Select
+
+assign spitx1   = spi1cs & (~ca[4]) & (~ca[3]) & (~ca[2]) & (mwe==4'b1111); // 0x60 TX data
+assign spictrl1 = spi1cs & (~ca[4]) & (~ca[3]) & ( ca[2]) & (mwe==4'b1111); // 0x64 Control
+assign spisswr1 = spi1cs & (~ca[4]) & ( ca[3]) & (~ca[2]) & (mwe==4'b1111); // 0x68 Slave Select
+ 
+always @(posedge cclk or posedge reset) 
+ begin 
+  if (reset) begin
+    spicontrol1 <= 14'h0;
+    spi_ss1 <= 1'b1;
+  end else begin
+    if (spictrl1) 
+      spicontrol1 <= cdo[13:0]; 
+    if (spisswr1) 
+      spi_ss1 <= cdo[0]; 
+  end
+ end 
+  
+assign LORA_CS = spi_ss1; 
+SPI_master spi1 (.clk(cclk), .miso(miso1), .wr(spitx1), .din(cdo),  
+ .divider(spicontrol1[7:0]), .bits(spicontrol1[13:8]), 
+.sck(sck1), .mosi(mosi1), 
+ .busy(busy1), .dout(spirx1) );
+
+
+///////////////////////////// 
+// TIMER
+wire timer_irq;  
+wire [31:0] tcount; 
+wire timerwr;
+wire timerrd;
+
+assign timerwr = timercs & (mwe==4'b1111);  // Write MAX_COUNT at 0xE0000040
+assign timerrd = timercs & (mwe==4'b0000);   // Read TIMER at 0xE0000040
+
+TIMER timer (.clk(cclk), .maxcount(cdo[31:0]), .flagtimer(timer_irq), 
+.rd(timerrd), .wr(timerwr) , .contador(tcount[31:0])); 
+
+
+
+
+
+
+
 
 //////////////////////////////////////////
 //    Interrupt control
+// IRQ enable reg (8 bits: bits 7-0 for interrupts 6-0 + trap)
 
-// IRQ enable reg (8 bits: bits 7-0 for interrupts 7-0)
-reg [7:0]irqen=0;
+reg [7:1]irqen=0;
 always @(posedge cclk or posedge reset) begin
-	if (reset) irqen<=0; else
-	if (irqcsen & mwe[0]) irqen<=cdo[7:0];
+	if (reset) irqen<=0; 
+    else
+	    if (irqcsen & mwe[0]) irqen<=cdo[7:1];
 end
 
 // IRQ vectors
@@ -343,30 +495,26 @@ reg [31:2]irqvect[0:7];
 assign v2 = {irqvect[2],2'b00};
 
 always @(posedge cclk) 
- if (irqcs & (mwe==4'b1111)) 
-  irqvect[ca[4:2]]<=cdo[31:2];
-
-// Timer interrupt (placeholder - no implementado completamente)
-wire timer_irq = 1'b0;  // TODO: Implementar comparador con MAX_COUNT
+ if (irqcs & (~ca[5]) & (mwe==4'b1111)) irqvect[ca[4:2]]<=cdo[31:2];
 
 // Enabled IRQs (7 interrupts: timer, uart0_rx, uart0_tx, uart1_rx, uart1_tx, uart2_rx, uart2_tx)
-wire [6:0]irqpen={irqen[6]&thre2,  // UART2 TX
-                  irqen[5]&dv2,    // UART2 RX
-                  irqen[4]&thre1,  // UART1 TX
-				  irqen[3]&dv1,    // UART1 RX
-                  irqen[2]&thre0,  // UART0 TX
-				  irqen[1]&dv0,    // UART0 RX
-                  irqen[0]&timer_irq}; // Timer
+wire [7:1]irqpen={irqen[7]&thre2,  // UART2 TX
+                  irqen[6]&dv2,    // UART2 RX
+                  irqen[5]&thre1,  // UART1 TX
+				  irqen[4]&dv1,    // UART1 RX
+                  irqen[3]&thre0,  // UART0 TX
+				  irqen[2]&dv0,    // UART0 RX
+                  irqen[1]&timer_irq}; // Timer
 
 // Priority encoder (8 vectors: trap=0, timer=1, uart0_rx=2, uart0_tx=3, uart1_rx=4, uart1_tx=5, uart2_rx=6, uart2_tx=7)
 wire [2:0]vecn = trap       ? 3'b000 : (
-				 irqpen[0]  ? 3'b001 : ( // Timer 
-				 irqpen[1]  ? 3'b010 : ( // UART0 RX
-				 irqpen[2]  ? 3'b011 : ( // UART0 TX
-				 irqpen[3]  ? 3'b100 : ( // UART1 RX
-				 irqpen[4]  ? 3'b101 : ( // UART1 TX
-				 irqpen[5]  ? 3'b110 : ( // UART2 RX
-				 irqpen[6]  ? 3'b111 : ( // UART2 TX
+				 irqpen[1]  ? 3'b001 : ( // Timer 
+				 irqpen[2]  ? 3'b010 : ( // UART0 RX
+				 irqpen[3]  ? 3'b011 : ( // UART0 TX
+				 irqpen[4]  ? 3'b100 : ( // UART1 RX
+				 irqpen[5]  ? 3'b101 : ( // UART1 TX
+				 irqpen[6]  ? 3'b110 : ( // UART2 RX
+				 irqpen[7]  ? 3'b111 : ( // UART2 TX
 				 			  3'bxxx ))))))));
 				 			  
 assign ivector = irqvect[vecn];
