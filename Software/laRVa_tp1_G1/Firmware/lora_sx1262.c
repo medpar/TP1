@@ -42,6 +42,7 @@ uint8_t  SX1262_configSetSpreadingFactor(int spreadingFactor);
 void     SX1262_updateModulationParameters();
 uint8_t  SX1262_waitForRadioCommandCompletion(uint32_t timeout);
 void     SX1262_updateRadioFrequency();
+void     SX1262_readPacketStatus(void);
 
 #define  SX1262_ReadRegister            (0x1D)
 #define  SX1262_SetDIO2AsRfSwitchCtrl   (0x9D)
@@ -91,22 +92,12 @@ int iii;
 #define memcpy(a,b,c) for(iii=0;iii<c;iii++) (a)[iii]=(b)[iii];
 #define get_time() (TIMER) //(TIMER*1000)/CCLK  // debe  devolver ms
 #define get_DIO1() (GPIN & 2) // revisar que el pin esté configurado correctamente
-int debug = 0;
+static int debug = 0;
 
 void SPI_TRANSFER_BUF(uint8_t *a, uint32_t b)
-{ 
- if(debug)
- {
-  _printf("\nSent/Response\n"); 
-  for(int iii=0;iii<b;iii++){ _printf("%02x ", a[iii]); a[iii] = spi1xfer(a[iii]); }; 
-  _printf("\n"); 
-  for(int iii=0;iii<b;iii++){ _printf("%02x ", a[iii]); };
-  _printf("\n");
- }
- else
- {
-  for(int iii=0;iii<b;iii++) a[iii] = spi1xfer(a[iii]); 
- }
+{
+ // Silenciar debug y realizar solo la transferencia
+ for(int iii=0; iii<b; iii++) a[iii] = spi1xfer(a[iii]);
 }
 
 // -------------------------------------------------------------------------
@@ -745,3 +736,18 @@ uint32_t SX1262_frequencyToPLL(long rfFreq)
 */
 
 // -------------------------------------------------------------------------
+// Lectura simple de estado de paquete (RSSI/SNR). Útil tras TX para telemetría.
+void SX1262_readPacketStatus(void)
+{
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_GetPacketStatus;
+ SX1262_spiBuff[1] = 0xFF;
+ SX1262_spiBuff[2] = 0xFF;
+ SX1262_spiBuff[3] = 0xFF;
+ SX1262_spiBuff[4] = 0xFF;
+ SPI_TRANSFER_BUF(SX1262_spiBuff,5);
+ LORA_CS_1;
+ SX1262_rssi       = -((int   )SX1262_spiBuff[2]) / 2;
+ SX1262_snr        =  ((int8_t)SX1262_spiBuff[3]) / 4;
+ SX1262_signalRssi = -((int   )SX1262_spiBuff[4]) / 2;
+}

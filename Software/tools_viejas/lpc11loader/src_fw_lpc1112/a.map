@@ -1,0 +1,126 @@
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+flash            0x00000000         0x00004000
+ram              0x10000000         0x00000f00
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+                0x00000000                . = ORIGIN (flash)
+
+.text           0x00000000      0x878
+ FILL mask 0xff
+ *(.vectors)
+ .vectors       0x00000000       0xc0 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x00000000                Vectors
+ *(.bcrp)
+ .bcrp          0x000000c0       0xe8 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x000000c0                exit
+                0x000000c0                Default_Handler
+                0x000000c4                Reset_init
+                0x000002fc                . = 0x2fc
+ *fill*         0x000001a8      0x154 ff
+ *(.crp)
+ .crp           0x000002fc        0x4 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x000002fc                CRP
+ *(.text.startup)
+ .text.startup  0x00000300      0x4cc C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x00000300                main
+ *(.text)
+ *fill*         0x000007cc        0x4 ff
+ .text          0x000007d0       0x78 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x000007d0                SysTick
+                0x000007d8                delay_loop
+                0x000007e0                U0putch
+                0x000007f4                U0getch
+                0x00000808                writeenable
+                0x00000824                waitready
+ .text.__stub   0x00000848       0x30 linker stubs
+
+.glue_7         0x00000878        0x0
+ .glue_7        0x00000878        0x0 linker stubs
+
+.glue_7t        0x00000878        0x0
+ .glue_7t       0x00000878        0x0 linker stubs
+
+.vfp11_veneer   0x00000878        0x0
+ .vfp11_veneer  0x00000878        0x0 linker stubs
+
+.v4_bx          0x00000878        0x0
+ .v4_bx         0x00000878        0x0 linker stubs
+
+.iplt           0x00000878        0x0
+ .iplt          0x00000878        0x0 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.rodata         0x00000878       0x5c
+ .rodata        0x00000878       0x5c C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.rel.dyn        0x000008d4        0x0
+ .rel.iplt      0x000008d4        0x0 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x10000000                . = ORIGIN (ram)
+
+.data           0x10000000      0x18c load address 0x000008d4
+                0x000008d4                INIT_DATA_VALUES = LOADADDR (.data)
+                0x10000000                INIT_DATA_START = .
+ *(.data)
+ .data          0x10000000      0x18c C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x10000000                SPIout
+                0x10000060                SPIin
+                0x100000c8                SPIRin
+                0x10000130                SPIRout
+                0x1000018c                INIT_DATA_END = .
+                0x1000018c                BSS_START = .
+                0x1000018c                __bss_start__ = .
+
+.igot.plt       0x1000018c        0x0 load address 0x00000a60
+ .igot.plt      0x1000018c        0x0 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.bss            0x1000018c        0x0 load address 0x00000a60
+ *(.bss)
+ .bss           0x1000018c        0x0 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                0x1000018c                BSS_END = .
+                0x1000018c                __bss_end__ = .
+LOAD C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+START GROUP
+LOAD c:/program files (x86)/gnu tools arm embedded/5.4 2016q3/bin/../lib/gcc/arm-none-eabi/5.4.1/armv6-m\libgcc.a
+LOAD c:/program files (x86)/gnu tools arm embedded/5.4 2016q3/bin/../lib/gcc/arm-none-eabi/5.4.1/../../../../arm-none-eabi/lib/armv6-m\libg.a
+LOAD c:/program files (x86)/gnu tools arm embedded/5.4 2016q3/bin/../lib/gcc/arm-none-eabi/5.4.1/../../../../arm-none-eabi/lib/armv6-m\libc.a
+END GROUP
+OUTPUT(coderom.elf elf32-littlearm)
+
+.debug_info     0x00000000      0x968
+ .debug_info    0x00000000      0x968 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_abbrev   0x00000000      0x2fb
+ .debug_abbrev  0x00000000      0x2fb C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_loc      0x00000000      0x417
+ .debug_loc     0x00000000      0x417 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_aranges  0x00000000       0x58
+ .debug_aranges
+                0x00000000       0x58 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_ranges   0x00000000      0x1c0
+ .debug_ranges  0x00000000      0x1c0 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_line     0x00000000      0x3b1
+ .debug_line    0x00000000      0x3b1 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_str      0x00000000      0x252
+ .debug_str     0x00000000      0x252 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                                0x26b (size before relaxing)
+
+.comment        0x00000000       0x6e
+ .comment       0x00000000       0x6e C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+                                 0x6f (size before relaxing)
+
+.ARM.attributes
+                0x00000000       0x31
+ .ARM.attributes
+                0x00000000       0x31 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o
+
+.debug_frame    0x00000000      0x114
+ .debug_frame   0x00000000      0x114 C:\Users\jesman\AppData\Local\Temp\ccIIbrde.o

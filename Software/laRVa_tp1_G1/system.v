@@ -388,14 +388,14 @@ reg [13:0] spicontrol;  // SPI Control
 wire [31:0] spirx; 
 reg [1:0] spi_ss= 2'b11; // SPI Slave Select 
 
-// Decodificación de direcciones SPI0:
-// 0xE0000070 (0x70 = 8'b0111_0000) → ca[4:2] = 3'b000 → TX data
-// 0xE0000074 (0x74 = 8'b0111_0100) → ca[4:2] = 3'b001 → Control
-// 0xE0000078 (0x78 = 8'b0111_1000) → ca[4:2] = 3'b010 → Slave Select
 
-assign spitx   = spi0cs & (~ca[4]) & (~ca[3]) & (~ca[2]) & (mwe==4'b1111); 
-assign spictrl = spi0cs & (~ca[4]) & (~ca[3]) & ( ca[2]) & (mwe==4'b1111);  
-assign spisswr = spi0cs & (~ca[4]) & ( ca[3]) & (~ca[2]) & (mwe==4'b1111);  
+// Decodificacion de direcciones SPI0 (ca[4:2] sobre direcciones palabra):
+// 0xE0000070 (0x70) -> ca[4:2] = 3'b100 -> TX data
+// 0xE0000074 (0x74) -> ca[4:2] = 3'b101 -> Control
+// 0xE0000078 (0x78) -> ca[4:2] = 3'b110 -> Slave Select
+assign spitx   = spi0cs & ( ca[4]) & (~ca[3]) & (~ca[2]) & (mwe==4'b1111);  // 0x70
+assign spictrl = spi0cs & ( ca[4]) & (~ca[3]) & ( ca[2]) & (mwe==4'b1111);  // 0x74
+assign spisswr = spi0cs & ( ca[4]) & ( ca[3]) & (~ca[2]) & (mwe==4'b1111);  // 0x78
  
 always @(posedge cclk or posedge reset) 
  begin 

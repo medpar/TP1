@@ -63,6 +63,16 @@ volatile int state;
 #define LORA_RESET  (1U << 10)
 #define L_RX        (1U << 9)
 #define L_TX        (1U << 8)
+#define EN_5V_UP    (1U << 7)
+#define EN_5V_M4    (1U << 6)
+#define EN_1V4_M4   (1U << 5)
+#define M2_ON_OFF   (1U << 4)
+#define LED3        (1U << 3)
+#define LED2        (1U << 2)
+#define LED1        (1U << 1)
+#define LED0        (1U << 0)
+
+#define SENSOR_POWER (EN_5V_UP | EN_5V_M4 | EN_1V4_M4)
 
 #define IRQ_TIMER     (1U << 1)
 #define IRQ_UART0_RX  (1U << 2)
@@ -125,7 +135,12 @@ volatile uint8_t rdix1, wrix1; 	//Read index and write index
 uint8_t udat2[32]; 				//FIFO UART2
 volatile uint8_t rdix2, wrix2; 	//Read index and write index	
 
-static uint8_t lora_rx_buffer[256];
+static uint8_t lora_rx_buffer[128];
+
+// Forward declarations for FIFO helpers
+uint8_t hascharUART0(void);
+uint8_t hascharUART1(void);
+uint8_t hascharUART2(void);
 
 //Read of UART0
 uint8_t _getchUART0()
@@ -169,6 +184,7 @@ void *memcpy(void *dst, const void *src, unsigned int n)
 }
 
 extern int _printf(const char *format, ...);
+extern int _sprintf(char *out, const char *format, ...);
 
 static void debug_sensors(void)
 {
@@ -204,6 +220,60 @@ static void debug_sensors(void)
 	readGPS();
 }
 
+static void lora_stream_send(void)
+{
+	int temp_comp, press_comp, hum_comp;
+	char lat[24];
+	char lon[24];
+	char payload[180];
+	uint32_t msg_id = 0;
+
+	_puts("Envio LoRa continuo (pulsa cualquier tecla para volver al menu)\n");
+
+	if (!SX1262_Init()) {
+		_printf("Error al iniciar el LoRa\n");
+		return;
+	}
+	SX1262_configSetFrequency(868000000);
+	SX1262_configSetBandwidth(4);      	  //125 kHz
+	SX1262_configSetSpreadingFactor(7);  //SF7
+
+	while (1) {
+		if (hascharUART0()) {
+			// Cualquier tecla detiene el envío continuo
+			_getchUART0();
+			break;
+		}
+		lat[0] = '\0';
+		lon[0] = '\0';
+		startBME680();
+		temp_comp  = returnTemp();
+		press_comp = returnPressure();
+		hum_comp   = returnHUMIDITY(temp_comp);
+
+		if (!GPS_ReadLatLon(lat, (int)sizeof(lat), lon, (int)sizeof(lon))) {
+			lat[0] = '0'; lat[1] = '\0';
+			lon[0] = '0'; lon[1] = '\0';
+		}
+
+		payload[0] = '\0';
+		int len = _sprintf(payload,
+		                   "Grupo 1 , T= %02d.%02d, H= %d, P= %d, LAT=%s, LON=%s",
+		                   temp_comp/100, temp_comp%100,
+		                   hum_comp, press_comp,
+		                   lat, lon);
+		if (len < 0) len = 0;
+		_printf("TX: %s\n", payload);
+
+		SX1262_transmit((uint8_t *)payload, len);
+		SX1262_readPacketStatus();
+		_printf("rssi %4d, snr %4d :# 1 %3lu %s\n",
+		        SX1262_rssi, SX1262_snr, (unsigned long)msg_id, payload);
+		msg_id++;
+		_delay_ms(1000);
+	}
+}
+
 
 #define putchar(d) _putch(d)
 #include "printf.c"
@@ -222,8 +292,11 @@ const static char *menu="\n"
 "|                                                |\n" 
 "|    Seleccione: s -> Valores de los sensores    |\n" 
 "|    Seleccione: f -> Sensor de gases            |\n" 
+"|    Seleccione: p -> Polvo GP2Y1010             |\n" 
+"|    Seleccione: a -> ADC MCP3004                |\n" 
 "|    Seleccione: r -> Recibir LoRa               |\n" 
 "|    Seleccione: t -> Transmitir LoRa            |\n" 
+"|    Seleccione: c -> Envio LoRa continuo        |\n" 
 "|    Seleccione: g -> GPS                        |\n" 
 "|    Seleccione: d -> Debug de sensores          |\n" 
 "|    Seleccione: e -> Logo del equipo            |\n" 
@@ -232,54 +305,19 @@ const static char *menu="\n"
 "--------------------------------------------------\n"  
 "\n\n";
 
-const static char *menutxt="\n"
-"\n\n"
-"888                8888888b.  888     888\n"         
-"888                888   Y88b 888     888\n"        
-"888                888    888 888     888\n"       
-"888        8888b.  888   d88P Y88b   d88P 8888b.\n"  
-"888           '88b 8888888P'   Y88b d88P     '88b\n"
-"888       .d888888 888 T88b     Y88o88P  .d888888\n" 
-"888888888 888  888 888  T88b     Y888P   888  888\n"
-"888888888 'Y888888 888   T88b     Y8P    'Y888888\n"
-"\nIts Alive :-)\n"
-"\n";             
+const static char *menutxt="TP1 Grupo1 - laRVa IoT logger\n";
 
-const static char *logo="\n" 
-"\n\n"
-"       | | | |                       ( | )  \n"
-"     +---------+                    (  |  ) \n"
-"  ---|         |                       |   \n"
-"  ---|  VIMMAC |-----------------------|   \n"
-"  ---|         |                       |   \n"
-"     +---------+                      / \\  \n"
-"       | | | |                       /   \\ \n"
-"											\n"
-"\n"
-"   V     V  III  M     M  M     M   AAAAA   CCCCC\n"
-"   V     V   I   MM   MM  MM   MM  A     A  C\n"
-"    V   V    I   M M M M  M M M M  AAAAAAA  C\n"
-"     V V     I   M  M  M  M  M  M  A     A  C\n"
-"      V     III  M     M  M     M  A     A  CCCCC\n"
-"\n"
-"            _____ _____ ____ _   _ \n"
-"           |_   _| ____/ ___| | | |\n"
-"             | | |  _|| |   | |_| |\n"
-"             | | | |__| |___|  _  |\n"
-"             |_| |_____\\____|_| |_|\n"
-"									\n"
-"          ELECTRONICS FOR TP ONE \n"
-"\n\n"; 
+const static char *logo="TP1 Grupo1\n";
 
 // Cambios Clara y Miguel
 
-uint8_t hascharUART0(){return wrix0 - rdix0;}
+uint8_t hascharUART0(){return (wrix0 - rdix0) & 31;}
 // uint8_t hascharUART0(){return (wrix0 - rdix0) & 31;} // Opción que soluciona el problema de overflow
 
-uint8_t hascharUART1(){return wrix1 - rdix1;}
+uint8_t hascharUART1(){return (wrix1 - rdix1) & 31;}
 // uint8_t hascharUART1(){return (wrix1 - rdix1) & 31;} // Opción que soluciona el problema de overflow
 
-uint8_t hascharUART2(){return wrix2 - rdix2;}
+uint8_t hascharUART2(){return (wrix2 - rdix2) & 31;}
 // uint8_t hascharUART2(){return (wrix2 - rdix2) & 31;} // Opción que soluciona el problema de overflow
 
 
@@ -338,8 +376,8 @@ void  __attribute__((interrupt ("machine"))) irq3_handler(){
 //UART1 RX
 void __attribute__((interrupt ("machine"))) irq4_handler()
 {
-	readGPS();
-    IRQEN=0b00000000;
+	udat1[wrix1++] = UART1DAT;
+	wrix1 &= 31;
 }
 
 
@@ -390,46 +428,7 @@ return SPI1DAT;
 #define BAUD2 115200u
 #define NULL ((void *)0)
 
-// Get word from UART0
-uint32_t getw()
-{
-	uint32_t i;
-	i=_getchUART0();
-	i|=_getchUART0()<<8;
-	i|=_getchUART0()<<16;
-	i|=_getchUART0()<<24;
-	return i;
-}
-
-// Get word from UART1
-uint32_t getw1()
-{
-	uint32_t i;
-	i=_getchUART1();
-	i|=_getchUART1()<<8;
-	i|=_getchUART1()<<16;
-	i|=_getchUART1()<<24;
-	return i;
-}
-
-// Get word from UART2
-uint32_t getw2()
-{
-	uint32_t i;
-	i=_getchUART2();
-	i|=_getchUART2()<<8;
-	i|=_getchUART2()<<16;
-	i|=_getchUART2()<<24;
-	return i;
-}
-
-
-// Copy memory
-uint8_t *_memcpy(uint8_t *pdst, uint8_t *psrc, uint32_t nb)
-{
-	if (nb) do {*pdst++=*psrc++; } while (--nb);
-	return pdst;
-}
+static inline int abs_i(int x) { return (x < 0) ? -x : x; }
 
 //CHANGE CLARA MIGUEL
 // Main function
@@ -459,6 +458,9 @@ void main()
 	UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	    // UART0 baud rate
 	UART1BAUD = (CCLK+BAUD1/2)/BAUD1 -1;	// UART1 baud rate (GPS)
 	UART2BAUD = (CCLK+BAUD2/2)/BAUD2 -1;	// UART2 baud rate
+
+	// Enciende las alimentaciones necesarias y deja el SX1262 fuera de reset.
+	GPOUT = SENSOR_POWER | LORA_RESET;
 
 	//_delay_ms(100);
 	
@@ -551,7 +553,13 @@ void main()
 				}
 				break;
 	
-			// Sensores de humedad, temperatura y presión
+
+
+			// Envio continuo LoRa con sensores
+			case 'c':
+				lora_stream_send();
+				break;
+			// Sensores de humedad, temperatura y presion
 			case 's':
 				startBME680();
 	
@@ -568,7 +576,7 @@ void main()
 				_printf("%02d.%d%c", temp_comp / 100, temp_comp % 100, 167);
 	
 				_printf("\n La presion es: ");
-				_printf("%d Pascales", press_comp / 100);
+				_printf("%d Pascales", press_comp);
 	
 				_printf("\n La humedad es: ");
 				_printf("%02d.%03d%c", hum_comp / 1000, hum_comp % 1000, 37);
@@ -577,10 +585,25 @@ void main()
 				_printf("----------------------------------------------\n");
 				break;
 	
+			// Sensor de polvo GP2Y1010
+			case 'p': {
+				int raw = GP2Y1010_ReadRaw(MCP3004_CH1);
+				_printf("GP2Y1010 ADC raw: %d (0-1023, mayor -> mas polvo)\n", raw);
+				break;
+			}
+			// Lectura ADC directa
+			case 'a': {
+				int adc0 = MCP3004_Read(MCP3004_CH0);
+				int adc1 = MCP3004_Read(MCP3004_CH1);
+				int adc2 = MCP3004_Read(MCP3004_CH2);
+				int adc3 = MCP3004_Read(MCP3004_CH3);
+				_printf("ADC MCP3004:\nCH0=%d\nCH1=%d\nCH2=%d\nCH3=%d\n", adc0, adc1, adc2, adc3);
+				break;
+			}
+
 			// GPS
 			case 'g':
 				readGPS();
-				_getchUART0();
 				break;
 
 			// Debug completo
@@ -599,8 +622,12 @@ void main()
 	
 			// Sensor de gases
 			case 'f':
-				readGas();
+			{
+				int co_ppm = MQ9_ReadCOppm(MCP3004_CH0);
+				int ch4_ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
+				_printf("---- MQ9 ----\nCO: %d ppm\nCH4: %d ppm\n", co_ppm, ch4_ppm);
 				break;
+			}
 	
 			default:
 				continue;	

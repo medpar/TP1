@@ -1,0 +1,4239 @@
+Directory structure:
+└── laRVa_lesdoy_definitivoFINAL/
+    ├── laRVa.v
+    ├── laRVa_bak.v
+    ├── main.v
+    ├── pll.v
+    ├── spi.v
+    ├── system.v
+    ├── tb.v
+    ├── timer.v
+    ├── tovhex.c
+    ├── uart.v
+    ├── archivosVactualizados/
+    │   ├── spi.v
+    │   ├── system.v
+    │   └── timer.v
+    └── Firmware/
+        ├── LoRa.c
+        ├── LoRa.h
+        ├── main.c
+        ├── MCP3004.c
+        ├── MCP3004.h
+        ├── ModuloBME.c
+        ├── ModuloBME.h
+        ├── ModuloGPS.c
+        ├── ModuloGPS.h
+        ├── ModuloMQ9.c
+        ├── ModuloMQ9.h
+        ├── printf.c
+        ├── SPI.c
+        └── SPI.h
+
+================================================
+FILE: laRVa.v
+================================================
+///////////////////////////////////////////////////////////////////////////////
+//                laRVa RV32E / RV32I pipelined core                         //
+//                       Jesús Arias (2022)                                  //
+//                                                                           //
+// Public Domain code (bugs included). Credits to:                           //
+//  Claire Wolf (PicoRV core). The first I got working                       //
+//  Bruno Levy & Matthias Koch (FemtoRV core). Much code was taken from here.//
+///////////////////////////////////////////////////////////////////////////////
+
+module laRVa (
+		input  clk,			// 
+		input  reset,		// active high, asynchronous
+		output [31:2]addr,	// Bits 0 and 1 missing (words aligned to 32 bits)
+		output [31:0]wdata,	// Data output
+		output [3:0]wstrb,	// Byte strobes for writes
+		input  [31:0]rdata,	// Data input
+		input  irq,			// Interrupt, active high
+		input  [31:2]ivector,// IRQ vector 
+		output trap			// Trap ipterrupt requested for ECALL...
+	);
+
+///////////////////////////////////////////////
+//////////////// register bank ////////////////
+///////////////////////////////////////////////
+
+parameter LOG2NREG=4;			// N registers = 2^log2nreg
+parameter MAXREG=(1<<LOG2NREG)-1;
+
+reg [31:0] regs [1:MAXREG];
+
+integer i;
+initial begin
+	for (i=1; i<=MAXREG; i=i+1) regs[i]=0;
+end
+
+wire [4:0]rd;	// Destination register address
+wire [4:0]rs1;	// Source 1 register address
+wire [4:0]rs2;	// Source 2 register address
+wire regswr;	// Write enable
+
+wire [31:0]regsD;	// Input data to register bank
+wire [31:0]regsQ1;	// Output 1	(to ALU)
+wire [31:0]regsQ2;	// Output 2 (to ALU)
+assign regsQ1=(rs1[LOG2NREG-1:0]!=0) ? regs[rs1[LOG2NREG-1:0]] : 32'h0;
+assign regsQ2=(rs2[LOG2NREG-1:0]!=0) ? regs[rs2[LOG2NREG-1:0]] : 32'h0;
+
+always @(posedge clk) begin
+	if ((rd[LOG2NREG-1:0]!=0)&regswr) regs[rd[LOG2NREG-1:0]]<=regsD;
+end
+
+//////////////////////////////////////////////////////
+////////      Instr Reg. and some decoding    ////////
+//////////////////////////////////////////////////////
+wire opload, opstore, opjal, opjalr, opbranch, opimm, opreg;
+wire oplui, opauipc, opsystem, jump;
+
+// Valid op-code flag
+//  During the execution cycle of Loads, Stores, and Jumps
+//  an invalid op-code is loaded into the IR register, and
+//  this flag has to be set to zero
+reg opvalid=0;	
+always @(posedge clk or posedge reset) begin
+	if (reset) opvalid<=0;
+	else opvalid<=~(opload | opstore | jump | irqstart | mret);
+end
+
+// Instruction register
+reg [31:0]IR;
+always @(posedge clk) IR<=rdata;
+
+// Decoding of op-code fields
+wire [6:0]opcode=IR[6:0];
+wire [2:0]funct3=IR[14:12];
+wire [6:0]funct7=IR[31:25];
+
+assign rd  = opvalid ? IR[11:7]: 0;
+assign rs1 = opvalid ? IR[19:15]: 0;
+assign rs2 = opvalid ? IR[24:20]: 0;
+
+// The ten instruction opcodes
+assign opreg    = opvalid & (opcode==7'b0110011);	// Rd = Rs1 op Rs2
+assign opimm    = opvalid & (opcode==7'b0010011);	// Rd = Rs1 op imm
+assign opload   = opvalid & (opcode==7'b0000011); 
+assign opstore  = opvalid & (opcode==7'b0100011);
+assign opbranch = opvalid & (opcode==7'b1100011);	// Branch if condition
+assign opjal    = opvalid & (opcode==7'b1101111);
+assign opjalr   = opvalid & (opcode==7'b1100111);
+assign oplui    = opvalid & (opcode==7'b0110111);
+assign opauipc  = opvalid & (opcode==7'b0010111);
+assign opsystem = opvalid & (opcode==7'b1110011);
+
+// Jumps: JAL, JALR, and taken Branches
+assign jump = opjal | opjalr | (opbranch & predicate);
+// Write register file on all instructions except Store, Branches, and System
+assign regswr = (opreg|opimm|opload| opjal | opjalr | oplui | opauipc | csrrw_mepc);
+// System opcodes supported
+wire mret  = opsystem & (funct3==3'b000) & IR[21];	//Return from interrupts (user or machine)	
+wire ecall = opsystem & (funct3==3'b000) & (IR[21:20]==2'b00);
+wire ebreak= opsystem & (funct3==3'b000) & (IR[21:20]==2'b01);
+wire csrrw_mepc = opsystem  & (funct3==3'b001) & (IR[31:20]==12'h341);
+/////////////////////////
+// Inmediate values
+/////////////////////////
+// The five immediate formats
+wire [31:0] Uimm = {    IR[31],   IR[30:12], {12{1'b0}}};			// Upper
+wire [31:0] Iimm = {{21{IR[31]}}, IR[30:20]};						// Imm
+wire [31:0] Simm = {{21{IR[31]}}, IR[30:25],IR[11:7]};				// Store
+wire [31:0] Bimm = {{20{IR[31]}}, IR[7],IR[30:25],IR[11:8],1'b0};	// Branch
+wire [31:0] Jimm = {{12{IR[31]}}, IR[19:12],IR[20],IR[30:21],1'b0};	// JAL
+
+//////////////////////////////////////////////////////
+////////      ALU & other data processing     ////////
+//////////////////////////////////////////////////////
+
+// First ALU source
+wire [31:0] aluIn1 = oplui ? 0 : (opauipc ? {PCci,2'b00} : regsQ1);
+
+// Second ALU source
+wire [31:0] aluIn2 = 
+	( (opreg|opbranch)      ? regsQ2 : 32'h0 ) |
+	( (opimm|opload|opjalr) ? Iimm   : 32'h0 ) |
+	( opstore               ? Simm   : 32'h0 ) |
+	( (oplui|opauipc)       ? Uimm   : 32'h0 ) ;
+
+// The ALU has to subtract on SUB, SLT, SLTU, SLTI, SLTIU, and branches
+wire issub = (opreg & (funct7[5] | (funct3==2) | (funct3==3))) |
+			 (opimm & ((funct3==2) | (funct3==3))) | opbranch;
+
+// Use a single 33 bits subtract (32+carry) for SUB and all comparisons
+wire [32:0] aluAdder = {issub, (issub ? ~aluIn2 : aluIn2)} + aluIn1 + issub;
+wire LT  = (aluIn1[31] ^ aluIn2[31]) ? aluIn1[31] : aluAdder[32];
+wire LTU = aluAdder[32];
+wire EQ  = (aluAdder[31:0] == 0);
+
+  /////////////////////////////////////////////////
+  // Barrel shifter
+  /////////////////////////////////////////////////
+
+wire [31:0]sh_in;	// Input to right shift
+wire [31:0]sh_out;	// output
+wire left_sh;		// Shift to left
+wire signed_sh;		// Shift right preserving negatives
+assign left_sh = (opreg | opimm) & (funct3==3'h1);
+
+// reverse the bit order at the input for left shifts
+assign sh_in = left_sh ? 
+	{aluIn1[ 0],aluIn1[ 1],aluIn1[ 2],aluIn1[ 3],aluIn1[ 4],aluIn1[ 5],aluIn1[ 6],aluIn1[ 7],
+	 aluIn1[ 8],aluIn1[ 9],aluIn1[10],aluIn1[11],aluIn1[12],aluIn1[13],aluIn1[14],aluIn1[15],
+	 aluIn1[16],aluIn1[17],aluIn1[18],aluIn1[19],aluIn1[20],aluIn1[21],aluIn1[22],aluIn1[23],
+	 aluIn1[24],aluIn1[25],aluIn1[26],aluIn1[27],aluIn1[28],aluIn1[29],aluIn1[30],aluIn1[31]
+	} : aluIn1;
+// Arithmetic shift right (sign preserved)
+assign signed_sh = (opreg | opimm) & (funct3==3'h5) & funct7[5];
+// The five layers of the barrel shifter
+wire [31:0]sh_t1;
+wire [31:0]sh_t2;
+wire [31:0]sh_t3;
+wire [31:0]sh_t4;
+wire [31:0]sh_t5;
+assign sh_t1 = aluIn2[4] ? {{16{ signed_sh & sh_in[31]}},sh_in[31:16]} : sh_in;
+assign sh_t2 = aluIn2[3] ? {{ 8{ signed_sh & sh_t1[31]}},sh_t1[31: 8]} : sh_t1;
+assign sh_t3 = aluIn2[2] ? {{ 4{ signed_sh & sh_t2[31]}},sh_t2[31: 4]} : sh_t2;
+assign sh_t4 = aluIn2[1] ? {{ 2{ signed_sh & sh_t3[31]}},sh_t3[31: 2]} : sh_t3;
+assign sh_t5 = aluIn2[0] ? {{  { signed_sh & sh_t4[31]}},sh_t4[31: 1]} : sh_t4;
+
+// reverse the bit order at the output for left shifts
+assign sh_out = left_sh ? 
+	{sh_t5[ 0],sh_t5[ 1],sh_t5[ 2],sh_t5[ 3],sh_t5[ 4],sh_t5[ 5],sh_t5[ 6],sh_t5[ 7],
+	 sh_t5[ 8],sh_t5[ 9],sh_t5[10],sh_t5[11],sh_t5[12],sh_t5[13],sh_t5[14],sh_t5[15],
+	 sh_t5[16],sh_t5[17],sh_t5[18],sh_t5[19],sh_t5[20],sh_t5[21],sh_t5[22],sh_t5[23],
+	 sh_t5[24],sh_t5[25],sh_t5[26],sh_t5[27],sh_t5[28],sh_t5[29],sh_t5[30],sh_t5[31]
+	} : sh_t5;
+
+  /////////////////////////////////////////////////
+  // ALU output select
+  /////////////////////////////////////////////////
+
+wire [31:0] aluOut =
+     (((funct3==0)|oplui|opauipc) ? aluAdder[31:0]  : 32'b0) |
+     ((funct3==2)                 ? {31'b0, LT}     : 32'b0) |
+     ((funct3==3)                 ? {31'b0, LTU}    : 32'b0) |
+     ((funct3==4)                 ? aluIn1 ^ aluIn2 : 32'b0) |
+     ((funct3==6)                 ? aluIn1 | aluIn2 : 32'b0) |
+     ((funct3==7)                 ? aluIn1 & aluIn2 : 32'b0) |
+     (((funct3==1)|(funct3==5))   ? sh_out          : 32'b0) ;
+
+  //////////////////////////////////////////
+  // The predicate for conditional branches.
+  //////////////////////////////////////////
+wire [7:0]prlist = {
+	~LTU,	// 7: BGEU
+	LTU,	// 6: BLTU
+	~LT,	// 5: BGE
+	LT,		// 4: BLT
+	2'b00,	// 3,2: not used
+	~EQ,	// 1: BNE
+	EQ		// 0: BEQ
+};
+wire predicate = prlist[funct3];
+
+//////////////////////////////////////////
+// LOAD/STORE
+//////////////////////////////////////////
+// Address come from the adder in the ALU (rs1 + Imm)
+// All memory accesses are aligned on 32 bits boundary. For this
+// reason, we need some circuitry that does unaligned halfword
+// and byte load/store, based on:
+// - funct3[1:0]:  00->byte 01->halfword 10->word
+// - aluAdder[1:0]: indicates which byte/halfword is accessed
+
+   wire mem_byteAccess     =  funct3[1:0] == 2'b00;
+   wire mem_halfwordAccess =  funct3[1:0] == 2'b01;
+
+// address output              
+//assign addr=(opload|opstore) ? aluAdder[31:2] : PC[31:2];
+// a little bit faster...
+wire [31:0]ldstaddr= regsQ1 + (opload? Iimm : Simm);
+assign addr=(opload|opstore) ? ldstaddr[31:2] : PC;
+
+// LOAD, in addition to funct3[1:0], LOAD depends on:
+// - funct3[2]: 0->do sign expansion   1->no sign expansion
+
+   wire LOAD_sign =
+	(!funct3[2]) & (mem_byteAccess ? LOAD_byte[7] : LOAD_halfword[15]);
+
+   wire [31:0] LOAD_data =
+         mem_byteAccess ? {{24{LOAD_sign}},     LOAD_byte} :
+     mem_halfwordAccess ? {{16{LOAD_sign}}, LOAD_halfword} :
+                          rdata ;
+
+   wire [15:0] LOAD_halfword =
+	       aluAdder[1] ? rdata[31:16] : rdata[15:0];
+
+   wire  [7:0] LOAD_byte =
+	       aluAdder[0] ? LOAD_halfword[15:8] : LOAD_halfword[7:0];
+
+// STORE
+
+assign wdata[ 7: 0] = regsQ2[7:0];
+assign wdata[15: 8] = aluAdder[0] ? regsQ2[7:0]  : regsQ2[15: 8];
+assign wdata[23:16] = aluAdder[1] ? regsQ2[7:0]  : regsQ2[23:16];
+assign wdata[31:24] = aluAdder[0] ? regsQ2[7:0]  :
+			     aluAdder[1] ? regsQ2[15:8] : regsQ2[31:24];
+
+// The memory write mask:
+assign wstrb  = opstore ? 
+	      mem_byteAccess      ?
+	            (aluAdder[1] ?
+		          (aluAdder[0] ? 4'b1000 : 4'b0100) :
+		          (aluAdder[0] ? 4'b0010 : 4'b0001)
+                    ) :
+	      mem_halfwordAccess ?
+	            (aluAdder[1] ? 4'b1100 : 4'b0011) :
+              4'b1111:
+              4'b0000;
+
+///////////////////////////////////////////////
+// The value written back to the register file.
+///////////////////////////////////////////////
+
+assign regsD  =
+	((opreg | opimm | opauipc | oplui) ? aluOut     : 32'b0) |
+	(opload                            ? LOAD_data  : 32'b0) |
+	((opjal | opjalr)                  ? {PC,2'b00} : 32'b0) |
+	(csrrw_mepc                        ? {PCreg[0],2'b00} : 32'b0);
+
+//////////////////////////////////////////////////////
+///////////////////      PC     //////////////////////
+//////////////////////////////////////////////////////
+// The 2 LSB bits of PC are always 00, and aren't implemented
+// PC points one instruction ahead of the one being executed (4 bytes)
+// Two register stack: PC[0]: normal mode (user)
+//                     PC[1]: interrupts (machine)
+// Additional register PCci:  address of current instruction 
+
+reg  [31:2]PCreg[0:1];		// The Two PCs
+wire [31:2]PC=PCreg[mmode];	// Current mode PC
+
+wire [31:2]PC0=PCreg[0];	// For debug in gtkwave
+wire [31:2]PC1=PCreg[1];
+
+wire [31:2]PCimm=			// Immediate value to add to PC	
+	((opbranch & predicate) ? Bimm[31:2] : 30'h0) |
+	(opjal                  ? Jimm[31:2] : 30'h0);
+
+// Next PC logic
+wire [31:2]PCadd1= PC+(irqstart | opload | opstore ? 0 : 1); // Incremented/Same PC
+wire [31:2]PCadd2= PCci+PCimm;								 // Jump address
+wire [31:2]PCnext= opjalr ? aluAdder[31:2] : (jump? PCadd2 : PCadd1);
+
+always @(posedge clk or posedge reset) begin
+	if (reset) begin PCreg[0]<=0; PCreg[1]<=0; end
+	else begin
+		if (!mmode) PCreg[0]<= PCnext;
+		else if (csrrw_mepc) PCreg[0]<=regsQ1[31:2]; 
+		PCreg[1]<=(mmode&(~mret))? PCnext : ivector;
+	end
+end
+
+// The PC value last cycle = PC of current instruction
+reg [31:2]PCci;	
+always @(posedge clk) PCci<=PC;
+
+///////////////////////////////////////////////
+// Interrupts:
+// 	IRQ sequencer logic taken from GUS16
+//////////////////////////////////////////////
+
+reg q0=0;				// First FF (samples IRQ)
+reg mmode=0;			// Machine mode: 0=normal, 1=IRQ 
+wire ireti=mret&(~irq);	// Return from interrupt if no more IRQs pending
+wire trap=ecall|ebreak;	// ECALL or EBREAK executed
+
+always @(posedge clk or posedge reset ) 
+	begin
+	if (reset) begin 
+		q0<=1'b0;
+		mmode<=1'b0;
+	end
+	else begin
+		q0 <= (~ireti) & (q0 | irq);
+		mmode <= (~ireti) & (q0|mmode|trap);
+	end
+end
+
+assign irqstart = (~mmode) & (q0|trap) ; // Single cycle pulse
+
+
+endmodule
+
+
+
+================================================
+FILE: laRVa_bak.v
+================================================
+///////////////////////////////////////////////////////////////////////////////
+//                laRVa RV32E / RV32I pipelined core                         //
+//                       Jesús Arias (2022)                                  //
+//                                                                           //
+// Public Domain code (bugs included). Credits to:                           //
+//  Claire Wolf (PicoRV core). The first I got working                       //
+//  Bruno Levy & Matthias Koch (FemtoRV core). Much code was taken from here.//
+///////////////////////////////////////////////////////////////////////////////
+
+module laRVa (
+		input  clk,			// 
+		input  reset,		// active high, asynchronous
+		output [31:2]addr,	// Bits 0 and 1 missing (words aligned to 32 bits)
+		output [31:0]wdata,	// Data output
+		output [3:0]wstrb,	// Byte strobes for writes
+		input  [31:0]rdata,	// Data input
+		input  irq,			// Interrupt, active high
+		input  [31:2]ivector,// IRQ vector 
+		output trap			// Trap ipterrupt requested for ECALL...
+	);
+
+///////////////////////////////////////////////
+//////////////// register bank ////////////////
+///////////////////////////////////////////////
+
+parameter LOG2NREG=4;			// N registers = 2^log2nreg
+parameter MAXREG=(1<<LOG2NREG)-1;
+
+reg [31:0] regs [1:MAXREG];
+
+integer i;
+initial begin
+	for (i=1; i<=MAXREG; i=i+1) regs[i]=0;
+end
+
+wire [4:0]rd;	// Destination register address
+wire [4:0]rs1;	// Source 1 register address
+wire [4:0]rs2;	// Source 2 register address
+wire regswr;	// Write enable
+
+wire [31:0]regsD;	// Input data to register bank
+wire [31:0]regsQ1;	// Output 1	(to ALU)
+wire [31:0]regsQ2;	// Output 2 (to ALU)
+assign regsQ1=(rs1[LOG2NREG-1:0]!=0) ? regs[rs1[LOG2NREG-1:0]] : 32'h0;
+assign regsQ2=(rs2[LOG2NREG-1:0]!=0) ? regs[rs2[LOG2NREG-1:0]] : 32'h0;
+
+always @(posedge clk) begin
+	if ((rd[LOG2NREG-1:0]!=0)&regswr) regs[rd[LOG2NREG-1:0]]<=regsD;
+end
+
+//////////////////////////////////////////////////////
+////////      Instr Reg. and some decoding    ////////
+//////////////////////////////////////////////////////
+wire opload, opstore, opjal, opjalr, opbranch, opimm, opreg;
+wire oplui, opauipc, opsystem, jump;
+
+// Valid op-code flag
+//  During the execution cycle of Loads, Stores, and Jumps
+//  an invalid op-code is loaded into the IR register, and
+//  this flag has to be set to zero
+reg opvalid=0;	
+always @(posedge clk or posedge reset) begin
+	if (reset) opvalid<=0;
+	else opvalid<=~(opload | opstore | jump | irqstart | mret);
+end
+
+// Instruction register
+reg [31:0]IR;
+always @(posedge clk) IR<=rdata;
+
+// Decoding of op-code fields
+wire [6:0]opcode=IR[6:0];
+wire [2:0]funct3=IR[14:12];
+wire [6:0]funct7=IR[31:25];
+
+assign rd  = opvalid ? IR[11:7]: 0;
+assign rs1 = opvalid ? IR[19:15]: 0;
+assign rs2 = opvalid ? IR[24:20]: 0;
+
+// The ten instruction opcodes
+assign opreg    = opvalid & (opcode==7'b0110011);	// Rd = Rs1 op Rs2
+assign opimm    = opvalid & (opcode==7'b0010011);	// Rd = Rs1 op imm
+assign opload   = opvalid & (opcode==7'b0000011); 
+assign opstore  = opvalid & (opcode==7'b0100011);
+assign opbranch = opvalid & (opcode==7'b1100011);	// Branch if condition
+assign opjal    = opvalid & (opcode==7'b1101111);
+assign opjalr   = opvalid & (opcode==7'b1100111);
+assign oplui    = opvalid & (opcode==7'b0110111);
+assign opauipc  = opvalid & (opcode==7'b0010111);
+assign opsystem = opvalid & (opcode==7'b1110011);
+
+// Jumps: JAL, JALR, and taken Branches
+assign jump = opjal | opjalr | (opbranch & predicate);
+// Write register file on all instructions except Store, Branches, and System
+assign regswr = (opreg|opimm|opload| opjal | opjalr | oplui | opauipc | csrrw_mepc);
+// System opcodes supported
+wire mret  = opsystem & (funct3==3'b000) & IR[21];	//Return from interrupts (user or machine)	
+wire ecall = opsystem & (funct3==3'b000) & (IR[21:20]==2'b00);
+wire ebreak= opsystem & (funct3==3'b000) & (IR[21:20]==2'b01);
+wire csrrw_mepc = opsystem  & (funct3==3'b001) & (IR[31:20]==12'h341);
+/////////////////////////
+// Inmediate values
+/////////////////////////
+// The five immediate formats
+wire [31:0] Uimm = {    IR[31],   IR[30:12], {12{1'b0}}};			// Upper
+wire [31:0] Iimm = {{21{IR[31]}}, IR[30:20]};						// Imm
+wire [31:0] Simm = {{21{IR[31]}}, IR[30:25],IR[11:7]};				// Store
+wire [31:0] Bimm = {{20{IR[31]}}, IR[7],IR[30:25],IR[11:8],1'b0};	// Branch
+wire [31:0] Jimm = {{12{IR[31]}}, IR[19:12],IR[20],IR[30:21],1'b0};	// JAL
+
+//////////////////////////////////////////////////////
+////////      ALU & other data processing     ////////
+//////////////////////////////////////////////////////
+
+// First ALU source
+wire [31:0] aluIn1 = oplui ? 0 : (opauipc ? PCci : regsQ1);
+
+// Second ALU source
+wire [31:0] aluIn2 = 
+	( (opreg|opbranch)      ? regsQ2 : 32'h0 ) |
+	( (opimm|opload|opjalr) ? Iimm   : 32'h0 ) |
+	( opstore               ? Simm   : 32'h0 ) |
+	( (oplui|opauipc)       ? Uimm   : 32'h0 )
+	;
+
+// The ALU has to subtract on SUB, SLT, SLTU, SLTI, SLTIU, and branches
+wire issub = (opreg & (funct7[5] | (funct3==2) | (funct3==3))) |
+			 (opimm & ((funct3==2) | (funct3==3))) | opbranch;
+
+// Use a single 33 bits subtract (32+carry) for SUB and all comparisons
+wire [32:0] aluAdder = {issub, (issub ? ~aluIn2 : aluIn2)} + aluIn1 + issub;
+wire LT  = (aluIn1[31] ^ aluIn2[31]) ? aluIn1[31] : aluAdder[32];
+wire LTU = aluAdder[32];
+wire EQ  = (aluAdder[31:0] == 0);
+
+  /////////////////////////////////////////////////
+  // Barrel shifter
+  /////////////////////////////////////////////////
+
+wire [31:0]sh_in;	// Input to right shift
+wire [31:0]sh_out;	// output
+wire left_sh;		// Shift to left
+wire signed_sh;		// Shift right preserving negatives
+assign left_sh = (opreg | opimm) & (funct3==3'h1);
+
+// reverse the bit order at the input for left shifts
+assign sh_in = left_sh ? 
+	{aluIn1[ 0],aluIn1[ 1],aluIn1[ 2],aluIn1[ 3],aluIn1[ 4],aluIn1[ 5],aluIn1[ 6],aluIn1[ 7],
+	 aluIn1[ 8],aluIn1[ 9],aluIn1[10],aluIn1[11],aluIn1[12],aluIn1[13],aluIn1[14],aluIn1[15],
+	 aluIn1[16],aluIn1[17],aluIn1[18],aluIn1[19],aluIn1[20],aluIn1[21],aluIn1[22],aluIn1[23],
+	 aluIn1[24],aluIn1[25],aluIn1[26],aluIn1[27],aluIn1[28],aluIn1[29],aluIn1[30],aluIn1[31]
+	} : aluIn1;
+// Arithmetic shift right (sign preserved)
+assign signed_sh = (opreg | opimm) & (funct3==3'h5) & funct7[5];
+// The five layers of the barrel shifter
+wire [31:0]sh_t1;
+wire [31:0]sh_t2;
+wire [31:0]sh_t3;
+wire [31:0]sh_t4;
+wire [31:0]sh_t5;
+assign sh_t1 = aluIn2[4] ? {{16{ signed_sh & sh_in[31]}},sh_in[31:16]} : sh_in;
+assign sh_t2 = aluIn2[3] ? {{ 8{ signed_sh & sh_t1[31]}},sh_t1[31: 8]} : sh_t1;
+assign sh_t3 = aluIn2[2] ? {{ 4{ signed_sh & sh_t2[31]}},sh_t2[31: 4]} : sh_t2;
+assign sh_t4 = aluIn2[1] ? {{ 2{ signed_sh & sh_t3[31]}},sh_t3[31: 2]} : sh_t3;
+assign sh_t5 = aluIn2[0] ? {{  { signed_sh & sh_t4[31]}},sh_t4[31: 1]} : sh_t4;
+
+// reverse the bit order at the output for left shifts
+assign sh_out = left_sh ? 
+	{sh_t5[ 0],sh_t5[ 1],sh_t5[ 2],sh_t5[ 3],sh_t5[ 4],sh_t5[ 5],sh_t5[ 6],sh_t5[ 7],
+	 sh_t5[ 8],sh_t5[ 9],sh_t5[10],sh_t5[11],sh_t5[12],sh_t5[13],sh_t5[14],sh_t5[15],
+	 sh_t5[16],sh_t5[17],sh_t5[18],sh_t5[19],sh_t5[20],sh_t5[21],sh_t5[22],sh_t5[23],
+	 sh_t5[24],sh_t5[25],sh_t5[26],sh_t5[27],sh_t5[28],sh_t5[29],sh_t5[30],sh_t5[31]
+	} : sh_t5;
+
+  /////////////////////////////////////////////////
+  // ALU output select
+  /////////////////////////////////////////////////
+
+wire [31:0] aluOut =
+     (((funct3==0)|oplui|opauipc) ? aluAdder[31:0]  : 32'b0) |
+     ((funct3==2)                 ? {31'b0, LT}     : 32'b0) |
+     ((funct3==3)                 ? {31'b0, LTU}    : 32'b0) |
+     ((funct3==4)                 ? aluIn1 ^ aluIn2 : 32'b0) |
+     ((funct3==6)                 ? aluIn1 | aluIn2 : 32'b0) |
+     ((funct3==7)                 ? aluIn1 & aluIn2 : 32'b0) |
+     (((funct3==1)|(funct3==5))   ? sh_out          : 32'b0) ;
+
+  //////////////////////////////////////////
+  // The predicate for conditional branches.
+  //////////////////////////////////////////
+wire [7:0]prlist = {
+	~LTU,	// 7: BGEU
+	LTU,	// 6: BLTU
+	~LT,	// 5: BGE
+	LT,		// 4: BLT
+	2'b00,	// 3,2: not used
+	~EQ,	// 1: BNE
+	EQ		// 0: BEQ
+};
+wire predicate = prlist[funct3];
+
+//////////////////////////////////////////
+// LOAD/STORE
+//////////////////////////////////////////
+// Address come from the adder in the ALU (rs1 + Imm)
+// All memory accesses are aligned on 32 bits boundary. For this
+// reason, we need some circuitry that does unaligned halfword
+// and byte load/store, based on:
+// - funct3[1:0]:  00->byte 01->halfword 10->word
+// - aluAdder[1:0]: indicates which byte/halfword is accessed
+
+   wire mem_byteAccess     =  funct3[1:0] == 2'b00;
+   wire mem_halfwordAccess =  funct3[1:0] == 2'b01;
+
+// address output              
+//assign addr=(opload|opstore) ? aluAdder[31:2] : PC[31:2];
+// a little bit faster...
+wire [31:0]ldstaddr= regsQ1 + (opload? Iimm : Simm);
+assign addr=(opload|opstore) ? ldstaddr[31:2] : PC[31:2];
+
+// LOAD, in addition to funct3[1:0], LOAD depends on:
+// - funct3[2]: 0->do sign expansion   1->no sign expansion
+
+   wire LOAD_sign =
+	(!funct3[2]) & (mem_byteAccess ? LOAD_byte[7] : LOAD_halfword[15]);
+
+   wire [31:0] LOAD_data =
+         mem_byteAccess ? {{24{LOAD_sign}},     LOAD_byte} :
+     mem_halfwordAccess ? {{16{LOAD_sign}}, LOAD_halfword} :
+                          rdata ;
+
+   wire [15:0] LOAD_halfword =
+	       aluAdder[1] ? rdata[31:16] : rdata[15:0];
+
+   wire  [7:0] LOAD_byte =
+	       aluAdder[0] ? LOAD_halfword[15:8] : LOAD_halfword[7:0];
+
+// STORE
+
+assign wdata[ 7: 0] = regsQ2[7:0];
+assign wdata[15: 8] = aluAdder[0] ? regsQ2[7:0]  : regsQ2[15: 8];
+assign wdata[23:16] = aluAdder[1] ? regsQ2[7:0]  : regsQ2[23:16];
+assign wdata[31:24] = aluAdder[0] ? regsQ2[7:0]  :
+			     aluAdder[1] ? regsQ2[15:8] : regsQ2[31:24];
+
+// The memory write mask:
+assign wstrb  = opstore ? 
+	      mem_byteAccess      ?
+	            (aluAdder[1] ?
+		          (aluAdder[0] ? 4'b1000 : 4'b0100) :
+		          (aluAdder[0] ? 4'b0010 : 4'b0001)
+                    ) :
+	      mem_halfwordAccess ?
+	            (aluAdder[1] ? 4'b1100 : 4'b0011) :
+              4'b1111:
+              4'b0000;
+
+///////////////////////////////////////////////
+// The value written back to the register file.
+///////////////////////////////////////////////
+
+assign regsD  =
+	((opreg | opimm | opauipc | oplui) ? aluOut     : 32'b0) |
+	(opload                            ? LOAD_data  : 32'b0) |
+	((opjal | opjalr)                  ? PC         : 32'b0) |
+	(csrrw_mepc                        ? PCreg[0]   : 32'b0);
+
+//////////////////////////////////////////////////////
+///////////////////      PC     //////////////////////
+//////////////////////////////////////////////////////
+// PC points one instruction ahead of the one being executed (4 bytes)
+// Two register stack: PC[0]: normal mode (user)
+//                     PC[1]: interrupts (machine)
+
+reg  [31:0]PCreg[0:1];		// The Two PCs
+wire [31:0]PC=PCreg[mmode];	// Current mode PC
+
+wire [31:0]PC0=PCreg[0];
+wire [31:0]PC1=PCreg[1];
+
+wire [31:0]PCimm=			// Immediate value to add to PC	
+	((opbranch & predicate) ? Bimm : 32'h0) |
+	(opjal                  ? Jimm : 32'h0);
+
+// Next PC logic
+wire [31:0]PCadd1= PC+(irqstart | opload | opstore ? 0 : 4);
+wire [31:0]PCadd2= PCci+PCimm;
+wire [31:0]PCnext= opjalr ? aluAdder : (jump? PCadd2 : PCadd1);
+
+always @(posedge clk or posedge reset) begin
+	if (reset) begin PCreg[0]<=0; PCreg[1]<=0; end
+	else begin
+		if (!mmode) PCreg[0]<= PCnext;
+		else if (csrrw_mepc) PCreg[0]<=regsQ1; 
+		PCreg[1]<=(mmode&(~mret))? PCnext :{ivector,2'b00};
+	end
+end
+
+// The PC value last cycle = PC of current instruction
+reg [31:0]PCci;	
+always @(posedge clk) PCci<=PC;
+
+///////////////////////////////////////////////
+// Interrupts:
+// 	IRQ sequencer logic taken from GUS16
+//////////////////////////////////////////////
+
+reg q0=0;				// First FF (samples IRQ)
+reg mmode=0;			// Machine mode: 0=normal, 1=IRQ 
+wire ireti=mret&(~irq);	// Return from interrupt if no more IRQs pending
+wire trap=ecall|ebreak;	// ECALL or EBREAK execeted
+
+always @(posedge clk or posedge reset ) 
+	begin
+	if (reset) begin 
+		q0<=1'b0;
+		mmode<=1'b0;
+	end
+	else begin
+		q0 <= (~ireti) & (q0 | irq);
+		mmode <= (~ireti) & (q0|trap);
+	end
+end
+
+assign irqstart = (~mmode) & (q0|trap) ; // Single cycle pulse
+
+
+endmodule
+
+
+
+================================================
+FILE: main.v
+================================================
+//--------------------------------------------------------------------
+// RISC-V things
+// by Jesús Arias
+//--------------------------------------------------------------------
+`include "system.v"
+`include "pll.v"
+
+// Top module. (signals assigned to actual pins in file "pines.pcf")
+module main(
+	input  CLKIN, 		// Input clock from crystal oscillator (16MHz)
+	
+	// SPI 0
+	output ICE_SCK,
+	output ICE_MOSI,
+	input  ICE_MISO,	//(changed) usa los nombres dados en el fichero PBF o algo así
+	//output FSS,	// Flash SS
+	
+	output BME680_CS,
+	output ADC_CS,
+	
+	// SPI 1
+	output LORA_SCK,
+	output LORA_MOSI,
+	input  LORA_MISO,	//(changed) usa los nombres dados en el fichero PBF o algo así
+	//output FSS1,	// Flash SS
+	
+	output LORA_CS,
+	output LORA_RESET,
+	output LORA_RX,
+	output LORA_TX,
+	
+	//MQ9
+	output EN_5V_M4,
+	output EN_1V4_M4,
+	
+	// UART	0
+	input RXD,
+	output TXD,
+	
+	// UART	1
+	input RXD1,
+	output TXD1,
+	
+	// UART	2
+	input RXD2,
+	output TXD2
+);
+
+//-- PLL: generates a 25MHz master clock from a 16MHz input
+wire clk,pll_lock;
+
+pll 
+  pll1(
+	.clock_in(CLKIN),
+	.clock_out(clk),
+	.locked(pll_lock)
+	);
+
+//assign clk=CLKIN;
+//assign pll_lock=1'b1;
+
+// Game controller and SPI pin mappings
+assign JY4=1'b1;	// Game controller power
+wire [7:0]pinin;
+
+//assign XBHE=1'b0;
+//assign XBLE=1'b0;
+
+// Instance of the system
+SYSTEM sys1( .clk(clk), .reset(reset),
+		.txd(TXD), .rxd(RXD),
+		.txd1(TXD1), .rxd1(RXD1),
+		.txd2(TXD2), .rxd2(RXD2),
+		.sck(ICE_SCK), .mosi(ICE_MOSI), .miso(ICE_MISO), 
+		.sck1(LORA_SCK), .mosi1(LORA_MOSI), .miso1(LORA_MISO),
+		.BME_CS(BME680_CS), .ADC_CS(ADC_CS), .LORA_CS(LORA_CS),
+		.gpout({EN_1V4_M4, EN_5V_M4, LORA_RESET, LORA_TX, LORA_RX})
+);
+
+// Automatic RESET pulse: Reset is held active for 255 cycles after PLL lock
+/*assign LORA_RESET = 1'b1;
+assign LORA_TX = 1'b1;
+assign LORA_RX = 1'b0;
+*/
+reg [21:0]cnt=22'h3fffff;
+wire reset=(cnt!=0);
+
+always @(posedge clk) cnt<= reset ? cnt-1: cnt;
+
+
+
+endmodule
+
+
+
+
+
+================================================
+FILE: pll.v
+================================================
+/**
+ * PLL configuration
+ *
+ * This Verilog module was generated automatically
+ * using the icepll tool from the IceStorm project.
+ * Use at your own risk.
+ *
+ * Given input frequency:        12.000 MHz
+ * Requested output frequency:   18.000 MHz
+ * Achieved output frequency:    18.000 MHz
+ */
+
+module pll(
+	input  clock_in,
+	output clock_out,
+	output locked
+	);
+
+SB_PLL40_CORE #(
+		.FEEDBACK_PATH("SIMPLE"),
+		.DIVR(4'b0000),		// DIVR =  0
+		.DIVF(7'b0101111),	// DIVF = 47
+		.DIVQ(3'b101),		// DIVQ =  5
+		.FILTER_RANGE(3'b001)	// FILTER_RANGE = 1
+	) uut (
+		.LOCK(locked),
+		.RESETB(1'b1),
+		.BYPASS(1'b0),
+		.REFERENCECLK(clock_in),
+		.PLLOUTCORE(clock_out)
+		);
+
+endmodule
+
+
+
+================================================
+FILE: spi.v
+================================================
+
+///////////////////////////////////////////////////////////////////
+//					CONTROLADOR SPI MAESTRO
+//
+//  - Sólo modo SPI 0
+//  - Divisor de reloj entre 2 y 512 (siempre par)
+//  - Tamaño del dato variable entre 1 y 32 bits
+//
+///////////////////////////////////////////////////////////////////
+
+module SPI_master(
+	input  	clk,			// Reloj maestro (max 170MHz)
+	input 	miso,
+	input   wr,				// Write pulse (un ciclo clk min)
+	input   [31:0]din,		// solo se usan los bits LSBs si bits<32
+	input 	[7:0]divider,	// Fsck = Fclk/(2*(divider+1))
+	input	[5:0]bits,		// Nº de bits (max=32, min=1)
+	output 	sck,
+	output	mosi,
+	output  busy,			// Flag de ocupado
+	output  [31:0]dout		// Contiene el dato recibido al final (LSBs)
+);
+
+///////// divisor de reloj //////
+
+reg [7:0]divcnt=0;
+wire zerodiv;
+assign zerodiv=(divcnt==0);
+always @(posedge clk) begin
+	if (zerodiv | wr) divcnt<=divider;
+	else divcnt<=divcnt-1;
+end
+
+//// SCK ////
+
+reg sck=0;
+wire falling;
+always @(posedge clk) if (wr) sck<=1'b0; else if (zerodiv&busy) sck<=~sck;
+
+assign falling=zerodiv&sck;
+
+///// Contador de Bits /////
+
+reg [5:0]bitcnt=0;
+wire busy;
+assign busy=~(bitcnt==0);
+always @(posedge clk) begin
+	if (wr) bitcnt<=bits;
+	else if (falling & busy) bitcnt<=bitcnt-1;
+end
+
+///// Shifter //////
+
+reg sin=0;	// serial input sampled @ posedge SCK
+always @(posedge sck) sin<=miso;	// único FF que no es síncrono 100%
+
+reg [31:0]shreg;
+always @(posedge clk) begin
+	if (wr) shreg<=din;
+	else if (falling) begin
+		shreg[7:0]<={shreg[6:0],sin};
+		shreg[8] <=(bits>8 )&shreg[7];
+		shreg[9] <=(bits>9 )&shreg[8];
+		shreg[10]<=(bits>10)&shreg[9];
+		shreg[11]<=(bits>11)&shreg[10];
+		shreg[12]<=(bits>12)&shreg[11];
+		shreg[13]<=(bits>13)&shreg[12];
+		shreg[14]<=(bits>14)&shreg[13];
+		shreg[15]<=(bits>15)&shreg[14];
+		shreg[16]<=(bits>16)&shreg[15];
+		shreg[17]<=(bits>17)&shreg[16];
+		shreg[18]<=(bits>18)&shreg[17];
+		shreg[19]<=(bits>19)&shreg[18];
+		shreg[20]<=(bits>20)&shreg[19];
+		shreg[21]<=(bits>21)&shreg[20];
+		shreg[22]<=(bits>22)&shreg[21];
+		shreg[23]<=(bits>23)&shreg[22];
+		shreg[24]<=(bits>24)&shreg[23];
+		shreg[25]<=(bits>25)&shreg[24];
+		shreg[26]<=(bits>26)&shreg[25];
+		shreg[27]<=(bits>27)&shreg[26];
+		shreg[28]<=(bits>28)&shreg[27];
+		shreg[29]<=(bits>29)&shreg[28];
+		shreg[30]<=(bits>30)&shreg[29];
+		shreg[31]<=(bits>31)&shreg[30];
+	end
+end
+assign mosi=shreg[bits-1];	
+assign dout=shreg;
+
+endmodule
+
+
+
+
+================================================
+FILE: system.v
+================================================
+//--------------------------------------------------------------------
+// RISC-V things 
+// by Jesús Arias (2022)
+//--------------------------------------------------------------------
+/*
+	Description:
+	A LaRVA RISC-V system with 8KB of internal memory, and one UART
+	
+	Memory map:
+	
+	0x00000000 to 0x00001FFF	Internal RAM (with inital contents)
+	0x00002000 to 0x1FFFFFFF	the same internal RAM repeated each 8KB
+	0x20000000 to 0xDFFFFFFF       xxxx
+	0xE0000000 to 0xE00000FF    IO registers
+	0xE0000100 to 0xFFFFFFFF    the same IO registers repeated each 256B
+
+	IO register map (all registers accessed as 32-bit words):
+	
+   address  |      WRITE        |      READ 
+    -----------|-------------------|---------------
+    0xE0000000 | UART0 TX data     |  UART RX data  (changed), cambiado UART a UART0 porque hay más
+    0xE0000004 | UART0 Baud Divider|  UART flags    (changed), lo mismo que arriba
+			   |                   |
+    (changed)  |                   |
+	0xE0000008 | UART1 TX data     | UART1 RX data 
+	0xE000000C | UART1 Baud Divider| UART1 flags 
+			   |				   |
+	0xE0000010 | UART2 TX data     | UART2 RX data
+	0xE0000014 | UART2 Baud Divider| UART2 flags 
+			   |				   |
+	0xE0000020 | SPI0 TX data      | SPI0 RX data
+	0xE0000024 | SPI0 Control      | SPI0 flags 
+	0xE0000028 | SPI0 Slave Select | xxxx
+			   |				   |
+	0xE0000030 | SPI1 TX data      | SPI1 RX data
+	0xE0000034 | SPI1 Control      | SPI1 flags 
+	0xE0000038 | SPI1 Slave Select | xxxx
+			   |				   |
+	0xE0000040 | I2C data/control  | I2C data/status
+	0xE0000044 | I2C divider       |  
+			   |				   |
+    0xE0000060 | MAX_COUNT         |  TIMER
+			   |				   |
+	0xE0000080 | GPOUT             | GPOUT
+	0xE0000084 | GPIN              | GPIN
+	           |                   |
+    0xE00000C0 | Interrupt Enable  |  Interrupt enable (hemos cambiado la dirección porque necesitamos más direcciones), de E0  a C0
+    0xE00000E0 | IRQ vector 0 Trap |
+    0xE00000E4 | IRQ vector 1 RX   |
+    0xE00000E8 | IRQ vector 2 TX   |
+	0xE00000EC | IRQ vector 3 Timer|
+    0xE00000F0 | IRQ vector 4 RX1  |
+    0xE00000F4 | IRQ vector 5 TX1  |
+	0xE00000F8 | IRQ vector 6 RX2  |
+    0xE00000FC | IRQ vector 7 TX2  |
+	(endchanged)
+
+    UART Baud Divider: Baud = Fcclk / (DIVIDER+1) , with DIVIDER >=7
+    
+    UART FLAGS:    bits 31-5  bit 4  bit 3 bit 2 bit 1 bit 0
+                     xxxx      OVE    FE    TEND  THRE   DV
+        DV:   Data Valid (RX complete if 1. Cleared reading data register)
+        THRE: TX Holding register empty (ready to write to data register if 1)
+        TEND: TX end (holding reg and shift reg both empty if 1)
+        FE:   Frame Error (Stop bit received as 0 if FE=1)
+        OVE:  Overrun Error (Character received when DV was still 1)
+        (DV and THRE assert interrupt channels #4 and #5 when 1)
+	
+	------ 
+
+    SPI Control:   bits 31-14  bits 13-8  bits 7-0 
+                      xxxx        DLEN     DIVIDER 
+
+        DLEN:    Data lenght (8 to 32 bits) 
+        DIVIDER: SCK frequency = Fclk / (2*(DIVIDER+1)) 
+
+    SPI Flags:     bits 31-1  bit 0
+                      xxxx     BUSY 
+
+        BUSY:  SPI exchanging data when 1 
+
+    SPI Slave Select: bits 31-2  bit 1   bit 0 
+                         xxxx     ss1     ss0 
+
+        ss0 : Selects the SPI slave 0 when 0 (active low) 
+        ss1 : Selects the SPI slave 1 when 0 (active low) 
+
+    ------ 
+    I2C Data/Control: bit 10  bit 9  bit 8  bits 7-0 
+                      STOP   START   ACK     DATA 
+					  
+        STOP:  Send Stop sequence 
+        START: Send Start sequence 
+        ACK:   ACK bit. Must be 1 on writes and 0 on reads except last one 
+        DATA:  Data to write (Must be 0xFF on reads) 
+          - ACK and DATA are ignored if START or STOP are one 
+          - Do not set START and STOP simultaneously 
+          - Repeated START is not supported 
+          - Writing to this register sets the BUSY flag until the start, 
+            stop, or data, is sent 
+
+    I2C Data/Status:          bit 9  bit 8  bits 7-0 
+                               BUSY   ACK     DATA
+							   
+        BUSY:  Controller busy if 1.  
+        ACK:   Received ACK bit (for writes) 
+        DATA:  Received data (for reads) 
+
+    I2C Divider: bits 6-0 
+        SCL frequency = Fclk /(4*(DIVIDER+1)) 
+		
+    ------ 
+	
+    MAX_COUNT: Holds the maximum value of the timer counter. When the timer 
+        reaches this value gets reset and request an interrupt if enabled. 
+        Writes to MAX_COUNT also resets the timer and its interrupt flag. 
+
+    TIMER: the current value of the timer (incremented each clock cycle) 
+        Reads also clear the interrupt flag. 
+		
+    ------ 
+	
+    GPOUT: General purpose outputs. 
+
+    GPIN: General purpose inputs. 
+	
+    ------ 
+	
+	(changed) añadidos las nuevas interrupciones
+    Interrupt enable: Bits 1-0
+        bit 0: Not used
+        bit 1: Enable UART0 RX interrupt if 1
+		bit 2: Enable UART0 tX interrupt if 1
+        bit 3: Enable TIMER interrupt if 1
+		bit 4: Enable UART1 RX interrupt if 1
+        bit 5: Enable UART1 TX interrupt if 1
+		bit 6: Enable UART2 RX interrupt if 1
+        bit 7: Enable UART2 TX interrupt if 1
+    (endchanged)   
+*/
+
+`include "laRVa.v"
+`include "uart.v"
+`include "spi.v"
+`include "timer.v"
+
+module SYSTEM (
+	input clk,		// Main clock input 25MHz
+	input reset,	// Global reset (active high)
+
+	input	rxd,	// UART
+	output 	txd,
+	
+	input rxd1,		// UART 1 changed
+	output txd1,
+	
+	input rxd2,		// UART 2 changed
+	output txd2,
+
+	output sck,		// SPI0
+	output mosi,
+	input  miso,	
+	
+	output sck1,	//SPI1
+	input miso1,	
+	output mosi1,
+	
+	output [31:0] gpout,	//GPOUT
+	input [31:0] gpin,
+	
+	output ADC_CS,
+	output BME_CS,
+	output LORA_CS
+);
+
+wire		cclk;	// CPU clock
+assign	cclk=clk;
+
+///////////////////////////////////////////////////////
+////////////////////////// CPU ////////////////////////
+///////////////////////////////////////////////////////
+
+wire [31:0]	ca;		// CPU Address
+wire [31:0]	cdo;	// CPU Data Output
+wire [3:0]	mwe;	// Memory Write Enable (4 signals, one per byte lane)
+wire irq;
+wire [31:2]ivector;	// Where to jump on IRQ
+wire trap;			// Trap irq (to IRQ vector generator)
+
+laRVa cpu (
+		.clk     (cclk ),
+		.reset   (reset),
+		.addr    (ca[31:2] ),
+		.wdata   (cdo  ),
+		.wstrb   (mwe  ), //Instanciación de LaRVa 
+		.rdata   (cdi  ),
+		.irq     (irq  ),
+		.ivector (ivector),
+		.trap    (trap)
+	);
+
+ 
+///////////////////////////////////////////////////////
+///// Memory mapping
+wire iramcs;
+wire iocs;
+// Internal RAM selected in lower 512MB (0-0x1FFFFFFF)
+assign iramcs = (ca[31:29]==3'b000);
+// IO selected in last 512MB (0xE0000000-0xFFFFFFFF)
+assign iocs   = (ca[31:29]==3'b111);
+
+// Input bus mux
+reg [31:0]cdi;	// Not a register
+always@*
+ casex ({iocs,iramcs})
+        2'b01: cdi<=mdo; 
+        2'b10: cdi<=iodo;
+        default: cdi<=32'hxxxxxxxx;
+ endcase
+
+///////////////////////////////////////////////////////
+//////////////////// internal memory //////////////////
+///////////////////////////////////////////////////////
+wire [31:0]	mdo;	// Output data
+ram32	 ram0 ( .clk(~cclk), .re(iramcs), .wrlanes(iramcs?mwe:4'b0000),
+			.addr(ca[13:2]), .data_read(mdo), .data_write(cdo) );
+
+//////////////////////////////////////////////////
+////////////////// Peripherals ///////////////////
+//////////////////////////////////////////////////
+reg [31:0]tcount=0;
+always @(posedge clk) tcount<=tcount+1;
+
+//(CHANGED)
+wire uartcs;	// UART		at offset 0x00
+wire spics;		// SPI0     at offset 0x20 	//añadido spics0
+wire irqcs;		// IRQEN    at offset 0xC0 	//añadido irqcs
+wire timercs;
+				//		 ...
+				// other at offset 0xE0
+//Añadidos los bitsb 
+assign uartcs = iocs&(ca[7:5]==3'b000);			//0x00
+assign spics  = iocs&(ca[7:5]==3'b001);			//0x20
+assign timercs = iocs&(ca[7:5]==3'b011);		//0x60
+assign gpoutcs = iocs&(ca[7:5]==3'b100);		//0x80
+assign irqcs   = iocs&(ca[7:5]==3'b110); 		//0xC0
+assign irqvectcs = iocs&(ca[7:5]==3'b111);		//0xE0
+//(endchanged)
+
+// Peripheral output bus mux
+reg [31:0]iodo;	// Not a register
+always@*
+ casex (ca[7:2])
+	//UART 0
+	6'b000000: iodo<={24'hx,uart_do}; 
+	6'b000001: iodo<={27'hx,ove,fe,tend,thre,dv};
+	//UART 1 CHANGED
+	6'b000010: iodo<={24'h0,uart_do1};
+	6'b000011: iodo<={27'h0,ove1,fe1,tend1,thre1,dv1};
+	//UART 2 CHANGED
+	6'b000100: iodo<={24'h0,uart_do2};
+	6'b000101: iodo<={27'h0,ove2,fe2,tend2,thre2,dv2};
+	//SPI 1 CHANGED  	0xE0000020 -> ... 0010 00xx
+	6'b001000: iodo<= spirx;
+	6'b001001: iodo<= {31'h0,busy};
+	//SPI 2 CHANGED		0xE0000030 -> ... 0011 00xx
+	6'b001100: iodo<= spirx1;
+	6'b001101: iodo<= {31'h0,busy1};
+	//GPOUT CHANGED		0xE0000080 -> ... 1000 00xx
+	6'b100000: iodo<= {24'h0,gpout}; 
+	//GPIN CHANGED
+	6'b100001: iodo<= {24'h0,gpin}; 	
+	//TIMER CHANGED		0xE0000060 -> ... 0110 00xx
+	6'b011000: iodo<= count;	
+	
+	6'b011xxx: iodo<=tcount;
+	6'b111xxx: iodo<={30'hx,irqen};
+	default: iodo<=32'hxxxxxxxx;
+ endcase
+ 
+ //Registro gpout CHANGED
+reg [31:0] gpout;
+always @(posedge clk)
+	begin
+		if (gpoutcs & mwe[0])
+			begin
+				gpout <= cdo[31:0];
+			end
+	end
+
+/////////////////////////////
+// UART 0
+
+wire tend,thre,dv,fe,ove; // Flags
+wire [7:0] uart_do;	// RX output data
+wire uwrtx;			// UART TX write
+wire urd;			// UART RX read (for flag clearing)
+wire uwrbaud;		// UART BGR write
+// Register mapping
+// Offset 0: write: TX Holding reg
+// Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
+// Offset 1: write: BAUD divider
+
+//Si el uartcs está activo y están seleccionados los bits de la UART 0
+//CHANGED
+assign uwrtx   = 	uartcs & (~ca[4])& (~ca[3])& (~ca[2]) & mwe[0]; 
+assign uwrbaud =  	uartcs & (~ca[4])& (~ca[3])& ( ca[2]) & mwe[0] & mwe[1];
+assign urd     =  	uartcs & (~ca[4])& (~ca[3])& (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flgas
+
+UART_CORE #(.BAUDBITS(12)) uart0 ( .clk(cclk), .txd(txd), .rxd(rxd), 
+	.d(cdo[15:0]), .wrtx(uwrtx), .wrbaud(uwrbaud),. rd(urd), .q(uart_do),
+	.dv(dv), .fe(fe), .ove(ove), .tend(tend), .thre(thre) );
+	
+// UART1 CHANGED
+wire tend1,thre1,dv1,fe1,ove1; // Flags
+wire [7:0] uart_do1;	// RX output data
+wire uwrtx1;			// UART TX write
+wire urd1;			// UART RX read (for flag clearing)
+wire uwrbaud1;		// UART BGR write
+// Register mapping
+// Offset 0: write: TX Holding reg
+// Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
+// Offset 1: write: BAUD divider
+
+//Si el uartcs está activo y están seleccionados los bits de la UART 1
+assign uwrtx1   = uartcs & (~ca[4])& (ca[3])& (~ca[2]) & mwe[0];
+assign uwrbaud1 = uartcs & (~ca[4])& (ca[3])& ( ca[2]) & mwe[0] & mwe[1];
+assign urd1     = uartcs & (~ca[4])& (ca[3])& (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flags
+
+UART_CORE #(.BAUDBITS(12)) uart1 ( .clk(cclk), .txd(txd1), .rxd(rxd1), 
+	.d(cdo[15:0]), .wrtx(uwrtx1), .wrbaud(uwrbaud1),. rd(urd1), .q(uart_do1),
+	.dv(dv1), .fe(fe1), .ove(ove1), .tend(tend1), .thre(thre1));	
+	
+// UART2 CHANGED
+wire tend2,thre2,dv2,fe2,ove2; // Flags
+wire [7:0] uart_do2;	// RX output data
+wire uwrtx2;			// UART TX write
+wire urd2;			// UART RX read (for flag clearing) 
+wire uwrbaud2;		// UART BGR write
+// Register mapping
+// Offset 0: write: TX Holding reg
+// Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
+// Offset 1: write: BAUD divider 
+
+//Si el uartcs está activo y están seleccionados los bits de la UART 2
+assign uwrtx2   = uartcs & (ca[4])& (~ca[3])& (~ca[2]) & mwe[0];
+assign uwrbaud2 = uartcs & (ca[4])& (~ca[3])& ( ca[2]) & mwe[0] & mwe[1];
+assign urd2     = uartcs & (ca[4])& (~ca[3])& (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flgas
+
+UART_CORE #(.BAUDBITS(12)) uart2 ( .clk(cclk), .txd(txd2), .rxd(rxd2), 
+	.d(cdo[15:0]), .wrtx(uwrtx2), .wrbaud(uwrbaud2),. rd(urd2), .q(uart_do2),
+	.dv(dv2), .fe(fe2), .ove(ove2), .tend(tend2), .thre(thre2));
+	
+/////////////////////////////   
+// SPI0 CHANGED
+wire spitx;					// SPI write
+wire spictrl;
+wire spisswr;
+wire busy;					// SPI flag
+reg [13:0] spicontrol;		// SPI Control 
+wire [31:0] spirx;
+reg [1:0] spi_ss= 2'b11;	// SPI Slave Select
+assign spitx 		= spics  & (~ca[4]) & 	( ~ca[3])	& (~ca[2])  & (mwe==4'b1111);
+assign spictrl 		= spics  & (~ca[4]) &	( ~ca[3])	& ( ca[2])  & (mwe==4'b1111); 
+assign spisswr 		= spics  & (~ca[4]) & 	( ca[3])	& (~ca[2])  & (mwe==4'b1111); 
+
+always @(posedge clk)
+	begin
+		if (spictrl)
+			begin
+				spicontrol <= cdo[13:0];
+			end
+		if(spisswr)
+			begin
+				spi_ss <= cdo[1:0];
+			end
+	end
+ 
+assign BME_CS = spi_ss[0];
+assign ADC_CS = spi_ss[1];
+SPI_master spi0 (.clk(cclk), .miso(miso), .wr(spitx), .din(cdo), 
+	.divider(spicontrol[7:0]), .bits(spicontrol[13:8]), .sck(sck), .mosi(mosi),
+	.busy(busy), .dout(spirx) );
+
+/////////////////////////////
+// SPI1 CHANGED
+wire spitx1;		
+wire spictrl1;
+wire spisswr1;
+wire busy1;
+reg [13:0] spicontrol1;
+wire [31:0] spirx1;
+reg spi_ss1 = 1'b1;
+assign spitx1 		= spics	& (ca[4]) & ( ~ ca[3]) &(~ca[2]) & (mwe==4'b1111);// ..30 Dato a transmitir
+assign spictrl1 	= spics	& (ca[4]) & ( ~ ca[3]) &( ca[2]) & (mwe==4'b1111); // .. 34  Registro de control
+assign spisswr1 	= spics & (ca[4]) & ( ca[3])  & (~ca[2])  & (mwe==4'b1111); // ..38 Selección de chip
+
+always @(posedge clk)
+	begin
+		if (spictrl1)
+			begin
+				spicontrol1 <= cdo[13:0];
+			end
+		if(spisswr1)
+			begin
+				spi_ss1 <= cdo[0];
+			end
+	end
+ 
+assign LORA_CS = spi_ss1;
+SPI_master spi1 (.clk(cclk), .miso(miso1), .wr(spitx1), .din(cdo), 
+	.divider(spicontrol1[7:0]), .bits(spicontrol1[13:8]), .sck(sck1), .mosi(mosi1),
+	.busy(busy1), .dout(spirx1) );
+
+/////////////////////////////
+// TIMERTIMER CHANGED
+wire flagtimer; 
+wire [31:0] count;
+assign timerwr = timercs & (mwe==4'b1111); 
+assign timerrd = timercs & (mwe==4'b0000);
+ TIMER timer (.clk(cclk), .maxcount(cdo[31:0]), .flagtimer(flagtimer), .rd(timerrd), .wr(timerwr) , .contador(count[31:0]));
+ //TIMER2 timer2 (.clk(cclk), .contador(tcount[31:0]));
+ 
+/* reg [31:0] count2;
+always @(posedge cclk) count2 <= count2+1; */
+
+//////////////////////////////////////////
+//    Interrupt control CHANGED
+
+// IRQ enable reg
+reg [6:0]irqen=0;
+always @(posedge cclk or posedge reset) 
+begin
+	if (reset) irqen<=0; 
+	else
+	  if (irqcs & mwe[0]) irqen<=cdo[6:0];
+end
+
+// IRQ vectors
+reg [31:2]irqvect[0:7];
+always @(posedge cclk) 
+ if (irqvectcs & (mwe==4'b1111)) 
+    irqvect[ca[4:2]]<=cdo[31:2];
+
+// Enabled IRQs
+wire [6:0]irqpen={irqen[6]&thre2,
+			      irqen[5]&dv2, 
+                  irqen[4]&thre1, 
+				  irqen[3]&dv1,
+				  irqen[2]&flagtimer,
+				  irqen[1]&thre, 
+				  irqen[0]&dv};	// pending IRQs
+
+// Priority encoder
+wire [2:0]vecn = trap      ? 3'b000 : (	// ECALL, EBREAK: highest priority
+				 irqpen[0] ? 3'b001 : (	// UART RX
+				 irqpen[1] ? 3'b010 : 	// UART TX
+				 irqpen[2] ? 3'b011 : 	// TIMER
+				 irqpen[3] ? 3'b100 : 	// UART RX1
+				 irqpen[4] ? 3'b101 : 	// UART TX1
+				 irqpen[5] ? 3'b110 : 	// UART RX2
+				 irqpen[6] ? 3'b111 : 	// UART TX2
+				 			 3'bxx ));	
+assign ivector = irqvect[vecn];
+assign irq = (irqpen!=0)|trap;
+
+endmodule	// System
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------
+//-- 32-bit RAM Memory with independent byte-write lanes
+//----------------------------------------------------------------------------
+//////////////////////////////////////////////////////////////////////////////
+
+module ram32
+ (	input	clk,
+	input	re,
+	input	[3:0]	wrlanes,
+	input	[L2N_RAM_SIZE-1:0]	addr,
+	output	[31:0]	data_read,
+	input	[31:0] 	data_write
+ );
+
+parameter RAM_SIZE = 4096;
+localparam L2N_RAM_SIZE = $clog2(RAM_SIZE);
+
+reg [31:0] ram_array [0:RAM_SIZE-1];
+reg [31:0] data_out;
+        
+assign data_read = data_out;
+        
+always @(posedge clk) begin
+	if (wrlanes[0]) ram_array[addr][ 7: 0] <= data_write[ 7: 0];
+	if (wrlanes[1]) ram_array[addr][15: 8] <= data_write[15: 8];
+	if (wrlanes[2]) ram_array[addr][23:16] <= data_write[23:16];
+	if (wrlanes[3]) ram_array[addr][31:24] <= data_write[31:24];
+end
+
+always @(posedge clk) begin
+	if (re) data_out <= ram_array[addr];
+end
+
+initial begin
+`ifdef SIMULATION
+	$readmemh("rom.hex", ram_array);
+`else
+	$readmemh("rand.hex", ram_array);
+`endif
+end
+
+endmodule
+
+
+
+
+================================================
+FILE: tb.v
+================================================
+//-------------------------------------------------------------------
+
+//-------------------------------------------------------------------
+`include "system.v"
+`define SIMULATION
+
+module tb();
+
+//-- Registros con señales de entrada
+reg clk;
+reg resetb;
+reg rxd;
+wire txd;
+
+//-- Instanciamos 
+
+SYSTEM sys1(	.clk(clk),		// Main clock input 25MHz
+	.reset(~resetb),
+	.rxd(rxd)
+);
+
+// Reloj periódico
+always #5 clk=~clk;
+
+//-- Proceso al inicio
+initial begin
+	//-- Fichero donde almacenar los resultados
+	$dumpfile("tb.vcd");
+	$dumpvars(0, tb);
+
+	resetb = 0; clk=0; rxd=1;
+
+	#77		resetb=1;
+	#10000  rxd=0;	//START
+	
+	#1560   rxd=1;
+	#1560   rxd=0;
+	#1560   rxd=0;
+	#1560   rxd=0;
+
+	#1560   rxd=0;
+	#1560   rxd=0;
+	#1560   rxd=1;
+	#1560   rxd=0;
+
+	#1560   rxd=1;	//STOP
+	
+	# 319 $display("FIN de la simulacion");
+	//# 300000 $finish;
+	# 1000000 $finish;
+end
+
+
+
+endmodule
+
+
+
+
+
+================================================
+FILE: timer.v
+================================================
+//---------------------------------------------
+//		TIMER
+//---------------------------------------------
+
+module TIMER(
+  input clk,
+  input [31:0] maxcount,
+  input rd,
+  input wr,
+  output reg flagtimer,	//Flag
+  output reg [31:0] contador
+);
+
+  reg [31:0]aux=0;
+  
+  initial
+    begin	
+      contador = 0;
+      flagtimer = 0;
+    end
+
+always @(posedge clk)
+  begin
+    if (wr) 
+    begin
+      aux <= maxcount;
+      contador <= 0;
+      flagtimer <= 0;
+    end
+    if(aux > 0)
+    begin
+      if(rd) 
+        flagtimer <= 0;
+      if(contador == aux*18)
+      begin
+        contador <= 0;
+        flagtimer <= 1;
+      end
+      else
+        contador <= (contador+1);
+      //Vamos a programarlo para que, si lee el registro (timerrd=1), baje el flag Y NO CUENTE ESE CICLO
+      end
+  end
+endmodule
+
+
+================================================
+FILE: tovhex.c
+================================================
+#include <stdlib.h>
+#include <stdio.h>
+
+
+#define ROMBASE	(0) 		//0xE000 & 0x1F00)
+#define ROMSIZE (0x2000*2)
+
+unsigned char mem[ROMSIZE];
+
+main(int argc, char **argv)
+{
+	int i,n;
+	FILE *fp;
+
+	if ((fp=fopen(argv[1],"rb"))==NULL) exit(1);
+	bzero(mem,ROMSIZE);
+	n=fread(mem,1,ROMSIZE,fp);
+	fclose(fp);
+
+
+	if ((fp=fopen(argv[2],"wb"))==NULL) exit(1);
+	//fprintf(fp,"@%04X\n",ROMBASE);
+	for (i=0;i<ROMSIZE;i+=4) fprintf(fp,"%08X\n",mem[i]+(mem[i+1]<<8)+(mem[i+2]<<16)+(mem[i+3]<<24));
+	fclose(fp);
+	return 0;
+}
+
+
+
+
+================================================
+FILE: uart.v
+================================================
+
+//---------------------------------------------
+//		Core de UART
+//	- Doble función de transmisor y receptor
+//---------------------------------------------
+
+module UART_CORE(
+  output txd,    // Salida TX
+  output tend,	 // Flag TX completa
+  output thre,   // Flag Buffer TX vacío
+  input [15:0]d, // Datos TX,BRG
+  input wrtx,    // Escritura en TX
+  input wrbaud,	 // Escritura en BRG
+  output [7:0]q, // Datos RX
+  output dv,     // Flag dato RX válido
+  output fe,     // Flag Framing Error
+  output ove,    // Flag Overrun
+  input rxd,     // Entrada RX
+  input rd,      // Lectura RX (borra DV)
+  input clk
+);
+
+parameter BAUDBITS=9;
+
+//////// BAUD Rate Generation /////////
+reg [BAUDBITS-1:0]divider=0;
+always @(posedge clk) if (wrbaud) divider<=d[BAUDBITS-1:0];
+
+///////////////////////////////////////
+// Transmisor
+reg [7:0]thr;		// Buffer TX
+reg thre=1;			// Estado THR 1: vacío, 0: con dato
+reg [8:0]shtx=9'h1FF;	// Reg. desplazamiento de 9 bits 
+reg [3:0]cntbit;	// Contador de bits transmitidos
+reg rdy=1;			// Estado reg. despl. (1==idle)
+
+// Divisor de TX 
+reg [BAUDBITS-1:0] divtx=0;
+wire clko;			// pulsos de 1 ciclo de salida
+assign clko = (divtx==0);
+always @ (posedge clk) 
+    divtx <= (wrtx&rdy) ? 0 : (clko ? divider: divtx-1);
+
+always @(posedge clk)
+begin
+    if (wrtx) begin      // Escritura en buffer THR
+`ifdef SIMULATION
+        $write ("%c",d&255); $fflush ( );
+`endif
+        thr<=d[7:0];
+        thre<=1'b0;
+    end
+    
+    if(rdy&(~thre)) begin      // Carga de reg. desp
+        rdy<=1'b0;
+        thre<=1'b1;
+        shtx<={thr[7:0],1'b0}; // Incluido bit de START
+        cntbit<=4'b0000;
+    end
+    if (clko) begin 
+        if(~rdy) begin             // Desplazamiento de bits
+            shtx<={1'b1,shtx[8:1]};
+            cntbit<=cntbit+1;
+            if (cntbit[3]&cntbit[0]) rdy<=1'b1; // 9 bits: terminado
+        end
+    end
+end
+
+assign txd = shtx[0];
+assign tend = thre&rdy;
+
+////////////////////////////////////////
+// Receptor
+
+/// Sincronismo de reloj
+reg [1:0]rrxd=0; // RXD registrada dos veces
+wire resinc;         // activa si cambio en RXD (resincroniza divisor)
+wire falling;          // activa si flanco de bajada en RXD (para start)
+always @(posedge clk) rrxd<={rrxd[0],rxd};
+assign resinc = rrxd[0]^rrxd[1];
+assign falling = (~rrxd[0])&rrxd[1];
+
+/// Divisor
+// Genera un pulso en mitad de la cuenta (centro de bit)
+// se reinicia con resinc
+reg [BAUDBITS-1:0] divrx=0;
+wire shift;		// Pulso de 1 ciclo de salida
+wire clki0;		// recarga de contador
+assign shift = (divrx=={1'b0,divider[BAUDBITS-1:1]});
+assign clki0= (divrx==0);
+
+always @ (posedge clk) divrx <= (resinc|clki0) ? divider: divrx-1;
+
+reg dv=0;               // Dato válido si 1
+reg ove=0;              // Overrun
+reg [8:0]shrx;          // Reg. desplazamiento entrada (9 bits para stop)
+reg [7:0]rbr;           // Buffer RX
+reg stopb;              // Bit de stop recibido
+reg [3:0]cbrx=4'b1111;  // Contador de bits / estado (1111== idle)
+wire rxst;              // Guardar shr en buffer si flanco subida
+assign rxst=(cbrx==4'b1111);
+reg rxst0;              // Para detectar flanco
+
+always @(posedge clk)
+begin
+    rxst0<=rxst;
+    if (rxst & falling) cbrx<=4'h9;  // START: 9 bits a recibir
+    if (shift & (~rxst)) begin       // Desplazando y contando bits
+        shrx<= #1 {rrxd[0],shrx[8:1]};
+        cbrx<=cbrx-1;
+    end
+    if (rxst & (~rxst0)) begin   // Final de cuenta
+        {stopb,rbr}<=shrx;       // Guardando dato y bit STOP
+        dv<=1;                   // Dato válido
+        ove<=dv;                 // Overrun si ya hay dato válido
+    end
+
+    if (rd) begin   // Lectura: Borra flags
+        dv<=0;
+        ove<=0;
+    end
+end
+
+assign fe=~stopb;   // el Flag FE es el bit de STOP invertido
+assign q = rbr;
+endmodule
+
+
+
+
+================================================
+FILE: archivosVactualizados/spi.v
+================================================
+
+///////////////////////////////////////////////////////////////////
+//					CONTROLADOR SPI MAESTRO
+//
+//  - Sólo modo SPI 0
+//  - Divisor de reloj entre 2 y 512 (siempre par)
+//  - Tamaño del dato variable entre 1 y 32 bits
+//
+///////////////////////////////////////////////////////////////////
+
+module SPI_master(
+	input  	clk,			// Reloj maestro (max 170MHz)
+	input 	miso,
+	input   wr,				// Write pulse (un ciclo clk min)
+	input   [31:0]din,		// solo se usan los bits LSBs si bits<32
+	input 	[7:0]divider,	// Fsck = Fclk/(2*(divider+1))
+	input	[5:0]bits,		// Nº de bits (max=32, min=1)
+	output 	sck,
+	output	mosi,
+	output  busy,			// Flag de ocupado
+	output  [31:0]dout		// Contiene el dato recibido al final (LSBs)
+);
+
+///////// divisor de reloj //////
+
+reg [7:0]divcnt=0;
+wire zerodiv;
+assign zerodiv=(divcnt==0);
+always @(posedge clk) begin
+	if (zerodiv | wr) divcnt<=divider;
+	else divcnt<=divcnt-1;
+end
+
+//// SCK ////
+
+reg sck=0;
+wire falling;
+always @(posedge clk) if (wr) sck<=1'b0; else if (zerodiv&busy) sck<=~sck;
+
+assign falling=zerodiv&sck;
+
+///// Contador de Bits /////
+
+reg [5:0]bitcnt=0;
+wire busy;
+assign busy=~(bitcnt==0);
+always @(posedge clk) begin
+	if (wr) bitcnt<=bits;
+	else if (falling & busy) bitcnt<=bitcnt-1;
+end
+
+///// Shifter //////
+
+reg sin=0;	// serial input sampled @ posedge SCK
+always @(posedge sck) sin<=miso;	// único FF que no es síncrono 100%
+
+reg [31:0]shreg;
+always @(posedge clk) begin
+	if (wr) shreg<=din;
+	else if (falling) begin
+		shreg[7:0]<={shreg[6:0],sin};
+		shreg[8] <=(bits>8 )&shreg[7];
+		shreg[9] <=(bits>9 )&shreg[8];
+		shreg[10]<=(bits>10)&shreg[9];
+		shreg[11]<=(bits>11)&shreg[10];
+		shreg[12]<=(bits>12)&shreg[11];
+		shreg[13]<=(bits>13)&shreg[12];
+		shreg[14]<=(bits>14)&shreg[13];
+		shreg[15]<=(bits>15)&shreg[14];
+		shreg[16]<=(bits>16)&shreg[15];
+		shreg[17]<=(bits>17)&shreg[16];
+		shreg[18]<=(bits>18)&shreg[17];
+		shreg[19]<=(bits>19)&shreg[18];
+		shreg[20]<=(bits>20)&shreg[19];
+		shreg[21]<=(bits>21)&shreg[20];
+		shreg[22]<=(bits>22)&shreg[21];
+		shreg[23]<=(bits>23)&shreg[22];
+		shreg[24]<=(bits>24)&shreg[23];
+		shreg[25]<=(bits>25)&shreg[24];
+		shreg[26]<=(bits>26)&shreg[25];
+		shreg[27]<=(bits>27)&shreg[26];
+		shreg[28]<=(bits>28)&shreg[27];
+		shreg[29]<=(bits>29)&shreg[28];
+		shreg[30]<=(bits>30)&shreg[29];
+		shreg[31]<=(bits>31)&shreg[30];
+	end
+end
+assign mosi=shreg[bits-1];	// Lo más simple en multiplexores ;)
+assign dout=shreg;
+
+endmodule
+
+
+
+
+================================================
+FILE: archivosVactualizados/system.v
+================================================
+//--------------------------------------------------------------------
+// RISC-V things 
+// by Jesús Arias (2022)
+//--------------------------------------------------------------------
+/*
+	Description:
+	A LaRVA RISC-V system with 8KB of internal memory, and one UART
+	
+	Memory map:
+	
+	0x00000000 to 0x00001FFF	Internal RAM (with inital contents)
+	0x00002000 to 0x1FFFFFFF	the same internal RAM repeated each 8KB
+	0x20000000 to 0xDFFFFFFF       xxxx
+	0xE0000000 to 0xE00000FF    IO registers
+	0xE0000100 to 0xFFFFFFFF    the same IO registers repeated each 256B
+
+	IO register map (all registers accessed as 32-bit words):
+	
+   address  |      WRITE        |      READ 
+    -----------|-------------------|---------------
+    0xE0000000 | UART0 TX data     |  UART RX data  (changed), cambiado UART a UART0 porque hay más
+    0xE0000004 | UART0 Baud Divider|  UART flags    (changed), lo mismo que arriba
+			   |                   |
+    (changed)  |                   |
+	0xE0000008 | UART1 TX data     | UART1 RX data 
+	0xE000000C | UART1 Baud Divider| UART1 flags 
+			   |				   |
+	0xE0000010 | UART2 TX data     | UART2 RX data
+	0xE0000014 | UART2 Baud Divider| UART2 flags 
+			   |				   |
+	0xE0000020 | SPI0 TX data      | SPI0 RX data
+	0xE0000024 | SPI0 Control      | SPI0 flags 
+	0xE0000028 | SPI0 Slave Select | xxxx
+			   |				   |
+	0xE0000030 | SPI1 TX data      | SPI1 RX data
+	0xE0000034 | SPI1 Control      | SPI1 flags 
+	0xE0000038 | SPI1 Slave Select | xxxx
+			   |				   |
+	0xE0000040 | I2C data/control  | I2C data/status
+	0xE0000044 | I2C divider       |  
+			   |				   |
+    0xE0000060 | MAX_COUNT         |  TIMER
+			   |				   |
+	0xE0000080 | GPOUT             | GPOUT
+	0xE0000084 | GPIN              | GPIN
+	           |                   |
+    0xE00000C0 | Interrupt Enable  |  Interrupt enable (hemos cambiado la dirección porque necesitamos más direcciones), de E0  a C0
+    0xE00000E0 | IRQ vector 0 Trap |
+    0xE00000E4 | IRQ vector 1 RX   |
+    0xE00000E8 | IRQ vector 2 TX   |
+	0xE00000EC | IRQ vector 3 Timer|
+    0xE00000F0 | IRQ vector 4 RX1  |
+    0xE00000F4 | IRQ vector 5 TX1  |
+	0xE00000F8 | IRQ vector 6 RX2  |
+    0xE00000FC | IRQ vector 7 TX2  |
+	(endchanged)
+
+    UART Baud Divider: Baud = Fcclk / (DIVIDER+1) , with DIVIDER >=7
+    
+    UART FLAGS:    bits 31-5  bit 4  bit 3 bit 2 bit 1 bit 0
+                     xxxx      OVE    FE    TEND  THRE   DV
+        DV:   Data Valid (RX complete if 1. Cleared reading data register)
+        THRE: TX Holding register empty (ready to write to data register if 1)
+        TEND: TX end (holding reg and shift reg both empty if 1)
+        FE:   Frame Error (Stop bit received as 0 if FE=1)
+        OVE:  Overrun Error (Character received when DV was still 1)
+        (DV and THRE assert interrupt channels #4 and #5 when 1)
+	
+	------ 
+
+    SPI Control:   bits 31-14  bits 13-8  bits 7-0 
+                      xxxx        DLEN     DIVIDER 
+
+        DLEN:    Data lenght (8 to 32 bits) 
+        DIVIDER: SCK frequency = Fclk / (2*(DIVIDER+1)) 
+
+    SPI Flags:     bits 31-1  bit 0
+                      xxxx     BUSY 
+
+        BUSY:  SPI exchanging data when 1 
+
+    SPI Slave Select: bits 31-2  bit 1   bit 0 
+                         xxxx     ss1     ss0 
+
+        ss0 : Selects the SPI slave 0 when 0 (active low) 
+        ss1 : Selects the SPI slave 1 when 0 (active low) 
+
+    ------ 
+    I2C Data/Control: bit 10  bit 9  bit 8  bits 7-0 
+                      STOP   START   ACK     DATA 
+					  
+        STOP:  Send Stop sequence 
+        START: Send Start sequence 
+        ACK:   ACK bit. Must be 1 on writes and 0 on reads except last one 
+        DATA:  Data to write (Must be 0xFF on reads) 
+          - ACK and DATA are ignored if START or STOP are one 
+          - Do not set START and STOP simultaneously 
+          - Repeated START is not supported 
+          - Writing to this register sets the BUSY flag until the start, 
+            stop, or data, is sent 
+
+    I2C Data/Status:          bit 9  bit 8  bits 7-0 
+                               BUSY   ACK     DATA
+							   
+        BUSY:  Controller busy if 1.  
+        ACK:   Received ACK bit (for writes) 
+        DATA:  Received data (for reads) 
+
+    I2C Divider: bits 6-0 
+        SCL frequency = Fclk /(4*(DIVIDER+1)) 
+		
+    ------ 
+	
+    MAX_COUNT: Holds the maximum value of the timer counter. When the timer 
+        reaches this value gets reset and request an interrupt if enabled. 
+        Writes to MAX_COUNT also resets the timer and its interrupt flag. 
+
+    TIMER: the current value of the timer (incremented each clock cycle) 
+        Reads also clear the interrupt flag. 
+		
+    ------ 
+	
+    GPOUT: General purpose outputs. 
+
+    GPIN: General purpose inputs. 
+	
+    ------ 
+	
+	(changed) añadidos las nuevas interrupciones
+    Interrupt enable: Bits 1-0
+        bit 0: Not used
+        bit 1: Enable UART0 RX interrupt if 1
+		bit 2: Enable UART0 tX interrupt if 1
+        bit 3: Enable TIMER interrupt if 1
+		bit 4: Enable UART1 RX interrupt if 1
+        bit 5: Enable UART1 TX interrupt if 1
+		bit 6: Enable UART2 RX interrupt if 1
+        bit 7: Enable UART2 TX interrupt if 1
+    (endchanged)   
+*/
+
+`include "laRVa.v"
+`include "uart.v"
+
+module SYSTEM (
+	input clk,		// Main clock input 25MHz
+	input reset,	// Global reset (active high)
+
+	input	rxd,	// UART
+	output 	txd,
+	
+	output sck,		// SPI
+	output mosi,
+	input  miso,	
+	output fssb	// Flash CS
+
+);
+
+wire		cclk;	// CPU clock
+assign	cclk=clk;
+
+///////////////////////////////////////////////////////
+////////////////////////// CPU ////////////////////////
+///////////////////////////////////////////////////////
+
+wire [31:0]	ca;		// CPU Address
+wire [31:0]	cdo;	// CPU Data Output
+wire [3:0]	mwe;	// Memory Write Enable (4 signals, one per byte lane)
+wire irq;
+wire [31:2]ivector;	// Where to jump on IRQ
+wire trap;			// Trap irq (to IRQ vector generator)
+
+laRVa cpu (
+		.clk     (cclk ),
+		.reset   (reset),
+		.addr    (ca[31:2] ),
+		.wdata   (cdo  ),
+		.wstrb   (mwe  ), //Instanciación de LaRVa 
+		.rdata   (cdi  ),
+		.irq     (irq  ),
+		.ivector (ivector),
+		.trap    (trap)
+	);
+
+ 
+///////////////////////////////////////////////////////
+///// Memory mapping
+wire iramcs;
+wire iocs;
+// Internal RAM selected in lower 512MB (0-0x1FFFFFFF)
+assign iramcs = (ca[31:29]==3'b000);
+// IO selected in last 512MB (0xE0000000-0xFFFFFFFF)
+assign iocs   = (ca[31:29]==3'b111);
+
+// Input bus mux
+reg [31:0]cdi;	// Not a register
+always@*
+ casex ({iocs,iramcs})
+        2'b01: cdi<=mdo; 
+        2'b10: cdi<=iodo;
+        default: cdi<=32'hxxxxxxxx;
+ endcase
+
+///////////////////////////////////////////////////////
+//////////////////// internal memory //////////////////
+///////////////////////////////////////////////////////
+wire [31:0]	mdo;	// Output data
+ram32	 ram0 ( .clk(~cclk), .re(iramcs), .wrlanes(iramcs?mwe:4'b0000),
+			.addr(ca[13:2]), .data_read(mdo), .data_write(cdo) );
+
+//////////////////////////////////////////////////
+////////////////// Peripherals ///////////////////
+//////////////////////////////////////////////////
+reg [31:0]tcount=0;
+always @(posedge clk) tcount<=tcount+1;
+
+//(CHANGED)
+wire uartcs;	// UART		at offset 0x00
+wire spics;		// SPI0     at offset 0x20 	//añadido spics0
+wire irqcs;		// IRQEN    at offset 0xC0 	//añadido irqcs
+wire timercs;
+				//		 ...
+				// other at offset 0xE0
+//Añadidos los bitsb 
+assign uartcs = iocs&(ca[7:5]==3'b000);			//0x00
+assign spics  = iocs&(ca[7:5]==3'b001);			//0x20
+assign irqcs   = iocs&(ca[7:5]==3'b111); 		//0xC0
+assign gpoutcs = iocs&(ca[7:5]==6'b110);		//0x80
+assign timercs = iocs&(ca[7:5]==3'b011);		//0x60
+assign irqveccs = iocs&(ca[7:5]==3'b111);		//0xE0
+//(endchanged)
+
+// Peripheral output bus mux
+reg [31:0]iodo;	// Not a register
+always@*
+ casex (ca[7:2])
+	//UART 0
+	6'b000000: iodo<={24'hx,uart_do}; 
+	6'b000001: iodo<={27'hx,ove,fe,tend,thre,dv};
+	//UART 1 CHANGED
+	6'b000010: iodo<={24'h0,uart_do1};
+	6'b000011: iodo<={27'h0,ove1,fe1,tend1,thre1,dv1};
+	//UART 2 CHANGED
+	6'b000100: iodo<={24'h0,uart_do2};
+	6'b000101: iodo<={27'h0,ove2,fe2,tend2,thre2,dv2};
+	//SPI 1 CHANGED  	0xE0000020 -> ... 0010 00xx
+	6'b001000: iodo<= spirx;
+	6'b001001: iodo<= {31'h0,busy};
+	//SPI 2 CHANGED		0xE0000030 -> ... 0011 00xx
+	6'b001100: iodo<= spirx1;
+	6'b001101: iodo<= {31'h0,busy1};
+	//GPOUT CHANGED		0xE0000080 -> ... 1000 00xx
+	6'b100000: iodo<= {24'h0,gpout}; 
+	//GPIN CHANGED
+	6'b100001: iodo<= {24'h0,gpin}; 	
+	//TIMER CHANGED		0xE0000060 -> ... 0110 00xx
+	6'b011000: iodo<= count;	
+	
+	6'b011xxx: iodo<=tcount;
+	6'b111xxx: iodo<={30'hx,irqen};
+	default: iodo<=32'hxxxxxxxx;
+ endcase
+ 
+ //Registro gpout CHANGED
+ reg [31:0] gpout;
+always @(posedge clk)
+	begin
+		if (gpoutcs & (mwe==4'b1111))
+			begin
+				gpout <= cdo[31:0];
+			end
+	end
+
+/////////////////////////////
+// UART 0
+
+wire tend,thre,dv,fe,ove; // Flags
+wire [7:0] uart_do;	// RX output data
+wire uwrtx;			// UART TX write
+wire urd;			// UART RX read (for flag clearing)
+wire uwrbaud;		// UART BGR write
+// Register mapping
+// Offset 0: write: TX Holding reg
+// Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
+// Offset 1: write: BAUD divider
+
+//Si el uartcs está activo y están seleccionados los bits de la UART 0
+//CHANGED
+assign uwrtx   = 	uartcs & (~ca[4])& (~ca[3])& (~ca[2]) & mwe[0]; 
+assign uwrbaud =  	uartcs & (~ca[4])& (~ca[3])& ( ca[2]) & mwe[0] & mwe[1];
+assign urd     =  	uartcs & (~ca[4])& (~ca[3])& (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flgas
+
+UART_CORE #(.BAUDBITS(12)) uart0 ( .clk(cclk), .txd(txd), .rxd(rxd), 
+	.d(cdo[15:0]), .wrtx(uwrtx), .wrbaud(uwrbaud),. rd(urd), .q(uart_do),
+	.dv(dv), .fe(fe), .ove(ove), .tend(tend), .thre(thre) );
+	
+// UART1 CHANGED
+wire tend1,thre1,dv1,fe1,ove1; // Flags
+wire [7:0] uart_do1;	// RX output data
+wire uwrtx1;			// UART TX write
+wire urd1;			// UART RX read (for flag clearing)
+wire uwrbaud1;		// UART BGR write
+// Register mapping
+// Offset 0: write: TX Holding reg
+// Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
+// Offset 1: write: BAUD divider
+
+//Si el uartcs está activo y están seleccionados los bits de la UART 1
+assign uwrtx1   = uartcs & (~ca[4])& (ca[3])& (~ca[2]) & mwe[0];
+assign uwrbaud1 = uartcs & (~ca[4])& (ca[3])& ( ca[2]) & mwe[0] & mwe[1];
+assign urd1     = uartcs & (~ca[4])& (ca[3])& (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flags
+
+UART_CORE #(.BAUDBITS(12)) uart1 ( .clk(cclk), .txd(txd1), .rxd(rxd1), 
+	.d(cdo[15:0]), .wrtx(uwrtx1), .wrbaud(uwrbaud1),. rd(urd1), .q(uart_do1),
+	.dv(dv1), .fe(fe1), .ove(ove1), .tend(tend1), .thre(thre1));	
+	
+// UART2 CHANGED
+wire tend2,thre2,dv2,fe2,ove2; // Flags
+wire [7:0] uart_do2;	// RX output data
+wire uwrtx2;			// UART TX write
+wire urd2;			// UART RX read (for flag clearing) 
+wire uwrbaud2;		// UART BGR write
+// Register mapping
+// Offset 0: write: TX Holding reg
+// Offset 0: read strobe: Clear DV, OVE (also reads RX data buffer)
+// Offset 1: write: BAUD divider 
+
+//Si el uartcs está activo y están seleccionados los bits de la UART 2
+assign uwrtx2   = uartcs & (ca[4])& (~ca[3])& (~ca[2]) & mwe[0];
+assign uwrbaud2 = uartcs & (ca[4])& (~ca[3])& ( ca[2]) & mwe[0] & mwe[1];
+assign urd2     = uartcs & (ca[4])& (~ca[3])& (~ca[2]) & (mwe==4'b0000); // Clear DV, OVE flgas
+
+UART_CORE #(.BAUDBITS(12)) uart2 ( .clk(cclk), .txd(txd2), .rxd(rxd2), 
+	.d(cdo[15:0]), .wrtx(uwrtx2), .wrbaud(uwrbaud2),. rd(urd2), .q(uart_do2),
+	.dv(dv2), .fe(fe2), .ove(ove2), .tend(tend2), .thre(thre2));
+	
+/////////////////////////////   
+// SPI0 CHANGED
+wire spitx;					// SPI write
+wire spictrl;
+wire spisswr;
+wire busy;					// SPI flag
+reg [13:0] spicontrol;		// SPI Control 
+wire [31:0] spirx;
+reg [1:0] spi_ss= 2'b11;	// SPI Slave Select
+assign spitx 		= spics  & (~ca[4]) & 	( ~ca[3])	& (~ca[2])  & (mwe==4'b1111);
+assign spictrl 		= spics  & (~ca[4]) &	( ~ca[3])	& ( ca[2])  & (mwe==4'b1111); 
+assign spisswr 		= spics  & (~ca[4]) & 	( ca[3])	& (~ca[2])  & (mwe==4'b1111); 
+
+always @(posedge clk)
+	begin
+		if (spictrl)
+			begin
+				spicontrol <= cdo[13:0];
+			end
+		if(spisswr)
+			begin
+				spi_ss <= cdo[1:0];
+			end
+	end
+ 
+assign BME_CS = spi_ss[0];
+assign ADC_CS = spi_ss[1];
+SPI_master spi0 (.clk(cclk), .miso(miso), .wr(spitx), .din(cdo), 
+	.divider(spicontrol[7:0]), .bits(spicontrol[13:8]), .sck(sck), .mosi(mosi),
+	.busy(busy), .dout(spirx) );
+
+/////////////////////////////
+// SPI1 CHANGED
+wire spitx1;		
+wire spictrl1;
+wire spisswr1;
+wire busy1;
+reg [13:0] spicontrol1;
+wire [31:0] spirx1;
+reg spi_ss1 = 1'b1;
+assign spitx1 		= spics	& (ca[4]) & ( ~ ca[3]) &(~ca[2]) & (mwe==4'b1111);// ..30 Dato a transmitir
+assign spictrl1 	= spics	& (ca[4]) & ( ~ ca[3]) &( ca[2]) & (mwe==4'b1111); // .. 34  Registro de control
+assign spisswr1 	= spics & (ca[4]) & ( ca[3])  & (~ca[2])  & (mwe==4'b1111); // ..38 Selección de chip
+
+always @(posedge clk)
+	begin
+		if (spictrl1)
+			begin
+				spicontrol1 <= cdo[13:0];
+			end
+		if(spisswr1)
+			begin
+				spi_ss1 <= cdo[0];
+			end
+	end
+ 
+assign LORA_CS = spi_ss1;
+SPI_master spi1 (.clk(cclk), .miso(miso1), .wr(spitx1), .din(cdo), 
+	.divider(spicontrol1[7:0]), .bits(spicontrol1[13:8]), .sck(sck1), .mosi(mosi1),
+	.busy(busy1), .dout(spirx1) );
+
+/////////////////////////////
+// TIMER CHANGED
+wire flagtimer; 
+wire [31:0] count;
+assign timerwr = timercs & (mwe==4'b1111); 
+assign timerrd = timercs & (mwe==4'b0000);
+TIMER timer (.clk(cclk), .maxcount(cdo[31:0]), .flagtimer(flagtimer), .rd(timerrd),
+	.wr(timerwr) , .contador(count[31:0]));
+
+
+//////////////////////////////////////////
+//    Interrupt control CHANGED
+
+// IRQ enable reg
+reg [6:0]irqen=0;
+always @(posedge cclk or posedge reset) begin
+	if (reset) irqen<=0; else
+	if (irqcs & mwe[0]) irqen<=cdo[6:0];
+end
+
+// IRQ vectors
+reg [31:2]irqvect[0:7];
+always @(posedge cclk) if (irqvectcs & (mwe==4'b1111)) irqvect[ca[4:2]]<=cdo[31:2];
+
+// Enabled IRQs
+wire [6:0]irqpen={irqen[6]&thre2, irqen[5]&dv2, irqen[4]&thre1, irqen[3]&dv1, irqen[2]&flagtimer,irqen[1]&thre, irqen[0]&dv};	// pending IRQs
+
+// Priority encoder
+wire [2:0]vecn = trap      ? 3'b000 : (	// ECALL, EBREAK: highest priority
+				 irqpen[0] ? 3'b001 : (	// UART RX
+				 irqpen[1] ? 3'b010 : 	// UART TX
+				 irqpen[2] ? 3'b011 : 	// TIMER
+				 irqpen[3] ? 3'b100 : 	// UART RX1
+				 irqpen[4] ? 3'b101 : 	// UART TX1
+				 irqpen[5] ? 3'b110 : 	// UART RX2
+				 irqpen[6] ? 3'b111 : 	// UART TX2
+				 			 3'bxx ));	
+assign ivector = irqvect[vecn];
+assign irq = (irqpen!=0)|trap;
+
+endmodule	// System
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------
+//-- 32-bit RAM Memory with independent byte-write lanes
+//----------------------------------------------------------------------------
+//////////////////////////////////////////////////////////////////////////////
+
+module ram32
+ (	input	clk,
+	input	re,
+	input	[3:0]	wrlanes,
+	input	[L2N_RAM_SIZE-1:0]	addr,
+	output	[31:0]	data_read,
+	input	[31:0] 	data_write
+ );
+
+parameter RAM_SIZE = 4096;
+localparam L2N_RAM_SIZE = $clog2(RAM_SIZE);
+
+reg [31:0] ram_array [0:RAM_SIZE-1];
+reg [31:0] data_out;
+        
+assign data_read = data_out;
+        
+always @(posedge clk) begin
+	if (wrlanes[0]) ram_array[addr][ 7: 0] <= data_write[ 7: 0];
+	if (wrlanes[1]) ram_array[addr][15: 8] <= data_write[15: 8];
+	if (wrlanes[2]) ram_array[addr][23:16] <= data_write[23:16];
+	if (wrlanes[3]) ram_array[addr][31:24] <= data_write[31:24];
+end
+
+always @(posedge clk) begin
+	if (re) data_out <= ram_array[addr];
+end
+
+initial begin
+`ifdef SIMULATION
+	$readmemh("rom.hex", ram_array);
+`else
+	$readmemh("rand.hex", ram_array);
+`endif
+end
+
+endmodule
+
+
+
+
+================================================
+FILE: archivosVactualizados/timer.v
+================================================
+//---------------------------------------------
+//		TIMER
+//---------------------------------------------
+
+module TIMER(
+  input clk,
+  input [31:0] maxcount,
+  input rd,
+  input wr,
+  output reg flagtimer,	//Flag
+  output reg [31:0] contador
+);
+
+  reg [31:0]aux=0;
+  
+  initial
+    begin	
+      contador = 0;
+      flagtimer = 0;
+    end
+
+always @(posedge clk)
+  begin
+    if (wr) 
+		begin
+		aux <= maxcount;
+		contador <= 0;
+		flagtimer <= 0;
+		end
+    if(aux > 0)
+		begin
+		  if(rd) 
+			flagtimer <= 0;
+		if(contador == aux)
+			begin
+				contador <= 0;
+				flagtimer <= 1;
+			end
+		else
+			contador <= (contador+1);
+		end
+      //Vamos a programarlo para que, si lee el registro (timerrd=1), baje el flag Y NO CUENTE ESE CICLO
+  end
+endmodule
+
+
+================================================
+FILE: Firmware/LoRa.c
+================================================
+typedef unsigned short int byte;
+//#include <cstdint>
+//#include "Arduino.h"
+
+#define false  0
+#define true  1
+
+
+uint32_t LoraSx1262_pllFrequency;
+uint8_t LoraSx1262_bandwidth;
+uint8_t LoraSx1262_codingRate;
+uint8_t LoraSx1262_spreadingFactor;
+uint8_t LoraSx1262_lowDataRateOptimize;
+uint32_t LoraSx1262_transmitTimeout;
+uint8_t spiBuff[32];
+unsigned int inReceiveMode;
+
+
+#define SX1262_NSS   (*(volatile uint32_t*)0xE0000038)
+#define SX1262_DIO1  (1<<1)
+
+#define SPI1DAT	 (*(volatile uint32_t*)0xE0000030)
+#define SPI1CTRL (*(volatile uint32_t*)0xE0000034)
+#define SPI1STA	 (*(volatile uint32_t*)0xE0000034)
+#define SPI1SS	 (*(volatile uint32_t*)0xE0000038)
+
+
+
+/*
+// Mapa de registros del datasheet LoRa
+#define LORA_HOPP_ENABLE (0x0385)
+#define LORA_PACK_LENGTH (0x0386)
+#define LORA_HOPP_ENABLE (0x0387)
+#define LORA_PACK_LENGTH (0x0388)
+#define LORA_HOPP_ENABLE (0x0020)
+#define LORA_PACK_LENGTH (0x0020)
+#define LORA_HOPP_ENABLE (0x0020)
+#define LORA_PACK_LENGTH (0x0020)
+*/
+
+
+
+void _memcpy(unsigned char *dest, unsigned char * src, unsigned int n)
+{
+ int i;
+ for(i=0;i<n;i++) dest[i]=src[i]; 
+}
+
+
+unsigned long millis(){ return (TIMER)/(CCLK/1000);}   
+
+
+//Función que se encarga de transmitir
+unsigned char SPI_transfer(unsigned char *lista, int n){
+   int i;
+   	SPI1SS = 0b1110; //Habil1itamos el chip select
+   for(i=0;i<n;i++){
+    SPI1DAT = lista[i]; // Escribimos el dato en el registro SPIDAT (spi_data)
+	_printf("%02x ", lista[i]);
+	//_printf("%c\n", SPI1DAT);
+	
+    while(SPI1STA & 1); // Leemos en el registro SPISTA (spi_status) para comprobar que haya funcionado bien.
+    lista[i] = SPI1DAT;
+    //_printf("Leo (%02x)  \n", lista[i]);
+  }
+  SPI1SS = 0b1111;
+  _printf("\n");
+  for(i=0;i<n;i++) _printf("%02x ", lista[i]);
+  _printf("\n\n");
+  
+  
+  return SPI1DAT;
+}
+
+/*
+//Función que se encarga de transmitir
+unsigned char SPI_transfer(unsigned char dato){
+
+    SPIDAT = dato; // Escribimos el dato en el registro SPIDAT (spi_data)
+    while(SPISTA & 1); // Leemos en el registro SPISTA (spi_status) para comprobar que haya funcionado bien.
+    return SPIDAT;
+}
+*/
+
+//Función que emula el comportamiento de digitalWrite 
+void digitalWrite(unsigned int REG, unsigned int data){
+
+    if(data){
+        REG = REG | (1<<data); // Mete dato (1) en la posición 1 del registro 
+    }else{ 
+	    while(GPIN & (1<<0)); // Espero a que LORA BUSY este en cero(libre)
+		REG = REG & (~(1<<data)); // Mete dato (0) en la posición 1 del registro 
+    }
+}
+// Poner un bit de un registro a 1
+// REG = REG | (1<<bit)
+// Poner un bit de un registro a 0
+// REG = REG & (~(1<<bit))
+// Leer un bit
+// ((REG  & (1<<bit))>>bit)
+
+
+//Función que emula el comportamiento de digitalRead
+unsigned int digitalRead(unsigned int REG){
+    //Con devolver el valor del reg gpin (proposito general vale)
+    return GPIN;
+}
+
+
+
+
+unsigned int LoraSx1262_begin(){ //Cambiamos miembro de clase por función (changed, he cambiado bool por int)
+
+    //(CHANGED)SPI_begin(); //inicializado en el system.v linea 290
+    /*Los pinModes no se ponen input o output, ya se conectarán los cables dode toque
+        pinMode(SX1262_NSS, OUTPUT);
+        pinMode(SX1262_RESET, OUTPUT);
+        pinMode(SX1262_DIO1, INPUT);
+    */
+	//_printf("Primer punto\n");
+    digitalWrite(SX1262_NSS, 1);
+	_delay_ms(10);
+	GPOUT |= (1<<2); // LORA_RESET = 1
+	_delay_ms(10);
+
+
+	//LO FORZAMOS SOLO A TRANSMITIR
+	GPOUT |=  (1<<1); // L_TX = 1
+	GPOUT &= ~(1<<0); // L_RX = 0
+
+	//////////////////////////////
+	
+	//_printf("Segundo punto\n");
+    unsigned int success = LoraSx1262_sanityCheck();
+	//_printf("Tercer punto\n");
+	
+    if(!success){
+		//_printf("Ha cascado\n");
+        return 0;
+		
+    }
+	//_printf("No Ha cascado\n");
+    LoraSx1262_configureRadioEssentials();
+	//_printf("no no Ha cascado\n");
+    return 1;
+}
+
+
+
+unsigned int LoraSx1262_sanityCheck(){
+	//_printf("Entrando\n");
+    digitalWrite(SX1262_NSS, 0); //ERROR
+	_delay_ms(10);
+    spiBuff[0] = 0x1D;
+    spiBuff[1] = 0x07;
+    spiBuff[2] = 0x40;
+    spiBuff[3] = 0x00;
+	spiBuff[4] = 0x00;
+	
+    SPI_transfer(spiBuff, 5);
+  
+    digitalWrite(SX1262_NSS, 1);  //CS High = Disabled
+	
+	if(spiBuff[4] == 0x14){
+		_printf("SanityCheck comprobado\n");
+		return 1; // Valido 
+	}else{	
+		return 0; // Error
+	}
+
+}
+
+
+void LoraSx1262_configureRadioEssentials() {
+  _printf("Entrando en configureRadioEssentials\n");
+  //Tell DIO2 to control the RF switch so we don't have to do it manually
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x9D;  //Opcode for "SetDIO2AsRfSwitchCtrl"
+  spiBuff[1] = 0x01;  //Enable
+  SPI_transfer(spiBuff, 2);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100); //Give time for the radio to proces command
+
+  //Just a single SPI command to set the frequency, but it's broken out
+  //into its own function so we can call it on-the-fly when the config changes
+  LoraSx1262_configSetFrequency(868000000);  //Set default frequency to 868mhz
+
+  //Set modem to LoRa (described in datasheet section 13.4.2)
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x8A;          //Opcode for "SetPacketType"
+  spiBuff[1] = 0x01;          //Packet Type: 0x00=GFSK, 0x01=LoRa
+  SPI_transfer(spiBuff, 2);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Set Rx Timeout to reset on SyncWord or Header detection
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x9F;          //Opcode for "StopTimerOnPreamble"
+  spiBuff[1] = 0x00;          //Stop timer on:  0x00=SyncWord or header detection, 0x01=preamble detection  SPI.transfer(spiBuff,2); //DUDA, ES 0X00 O 0X01 POR EL PREAMBULO
+  SPI_transfer(spiBuff, 2); 
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Set modulation parameters is just one more SPI command, but since it
+  //is often called frequently when changing the radio config, it's broken up into its own function
+  LoraSx1262_configSetPreset(PRESET_LONGRANGE);  //Sets default modulation parameters (changed from DEFAULT TO LONGRANGE)
+
+  // Set PA Config
+  // See datasheet 13.1.4 for descriptions and optimal settings recommendations
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x95;          //Opcode for "SetPaConfig"
+  spiBuff[1] = 0x04;          //paDutyCycle. See datasheet, set in conjuntion with hpMax
+  spiBuff[2] = 0x07;          //hpMax.  Basically Tx power.  0x00-0x07 where 0x07 is max power (changed) (EY)
+  spiBuff[3] = 0x00;          //device select: 0x00 = SX1262, 0x01 = SX1261
+  spiBuff[4] = 0x01;          //paLut (reserved, always set to 1)
+  SPI_transfer(spiBuff, 5); 
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  // Set TX Params
+  // See datasheet 13.4.4 for details
+  digitalWrite(SX1262_NSS,0); //Enable radio chip-select
+  spiBuff[0] = 0x8E;          //Opcode for SetTxParams
+  spiBuff[1] = 22;            //Power.  Can be -17(0xEF) to +14(0x0E) in Low Pow mode.  -9(0xF7) to 22(0x16) in high power mode (CHANGED) (EY)
+  spiBuff[2] = 0x02;          //Ramp time. Lookup table.  See table 13-41. 0x02="40uS"
+  SPI_transfer(spiBuff, 3);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Set LoRa Symbol Number timeout
+  //How many symbols are needed for a good receive.
+  //Symbols are preamble symbols
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0xA0;          //Opcode for "SetLoRaSymbNumTimeout"
+  spiBuff[1] = 0x00;          //Number of symbols.  Ping-pong example from Semtech uses 5
+  SPI_transfer(spiBuff, 2);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Enable interrupts
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x08;        //0x08 is the opcode for "SetDioIrqParams"
+  spiBuff[1] = 0x00;        //IRQMask MSB.  IRQMask is "what interrupts are enabled"
+  spiBuff[2] = 0x02;        //IRQMask LSB         See datasheet table 13-29 for details
+  spiBuff[3] = 0xFF;        //DIO1 mask MSB.  Of the interrupts detected, which should be triggered on DIO1 pin
+  spiBuff[4] = 0xFF;        //DIO1 Mask LSB
+  spiBuff[5] = 0x00;        //DIO2 Mask MSB
+  spiBuff[6] = 0x00;        //DIO2 Mask LSB
+  spiBuff[7] = 0x00;        //DIO3 Mask MSB
+  spiBuff[8] = 0x00;        //DIO3 Mask LSB
+  SPI_transfer(spiBuff, 9);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+  _printf("configureRadioEssentials comprobado\n");
+}
+
+
+void LoraSx1262_transmit(uint8_t *data, int dataLen) {
+  _printf("Entrando en transmit\n");
+  //Max lora packet size is 255 bytes
+  if (dataLen > 255) { dataLen = 255;}
+
+  /*Set packet parameters
+  # Tell LoRa what kind of packet we're sending (and how long)
+  # Parameters are:
+  # - Preamble Length MSB
+  # - Preamble Length LSB
+  # - Header Type (variable vs fixed len)
+  # - Payload Length
+  # - CRC on/off
+  # - IQ Inversion on/off
+  */
+  //LO FORZAMOS SOLO A TRANSMITIR
+  GPOUT |=  (1<<1); // L_TX = 1
+  GPOUT &= ~(1<<0); // L_RX = 0
+	
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x8C;          //Opcode for "SetPacketParameters"
+  spiBuff[1] = 0x00;          //PacketParam1 = Preamble Len MSB
+  spiBuff[2] = 0x08;          //PacketParam2 = Preamble Len LSB
+  spiBuff[3] = 0x00;          //PacketParam3 = Header Type. 0x00 = Variable Len, 0x01 = Fixed Length
+  spiBuff[4] = dataLen;       //PacketParam4 = Payload Length (Max is 255 bytes)
+  spiBuff[5] = 0x00;          //PacketParam5 = CRC Type. 0x00 = Off, 0x01 = on
+  spiBuff[6] = 0x00;          //PacketParam6 = Invert IQ.  0x00 = Standard, 0x01 = Inverted
+  SPI_transfer(spiBuff, 7);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(100);  //Give time for radio to process the command
+  _printf("Primer punto de control\n");
+  //Write the payload to the buffer
+  //  Reminder: PayloadLength is defined in setPacketParams
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x0E,          //Opcode for WriteBuffer command
+  spiBuff[1] = 0x00;          //Dummy byte before writing payload
+  SPI_transfer(spiBuff, 2);    //Send header info
+  //_printf("Segundo punto de control\n");
+  //SPI.transfer overwrites original buffer.  This could probably be confusing to the user
+  //If they tried writing the same buffer twice and got different results
+  //Eg "radio.transmit(buff,10); radio.transmit(buff,10);" would transmit two different packets
+  //We'll make a performance+memory compromise and write in 32 byte chunks to avoid changing the contents
+  //of the original data array
+  //Copy contents to SPI buff until it's full, and then write that
+  //TEST: I tested this method, which uses about 0.1ms (100 microseconds) more time, but it saves us about 10% of ram.
+  //I think this is a fair trade 
+//  _printf("Tercer punto de control\n");
+  uint8_t size = sizeof(spiBuff);
+  _printf("Tercer punto de control\n");
+  for (uint16_t i = 0; i < dataLen; i += size) {
+    if (i + size > dataLen) { size = dataLen - i; }
+    _memcpy(spiBuff,&(data[i]),size);
+    _printf("Prueba 1 %s\n", spiBuff);
+    SPI_transfer(spiBuff, size); //Write the payload itself
+  }
+ 
+  _printf("Cuarto punto de control\n");
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(1000);   //Give time for radio to process the command
+
+  //Transmit!
+  // An interrupt will be triggered if we surpass our timeout
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x83;          //Opcode for SetTx command
+  spiBuff[1] = 0xFF;          //Timeout (3-byte number)
+  spiBuff[2] = 0xFF;          //Timeout (3-byte number)
+  spiBuff[3] = 0xFF;          //Timeout (3-byte number)
+  SPI_transfer(spiBuff, 4);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(LoraSx1262_transmitTimeout); //Wait for tx to complete, with a timeout so we don't wait forever
+  _printf("Quinto punto de control\n");
+  //Remember that we are in Tx mode.  If we want to receive a packet, we need to switch into receiving mode
+  unsigned int inReceiveMode = false;
+}
+
+
+unsigned int LoraSx1262_waitForRadioCommandCompletion(uint32_t timeout) {
+  uint32_t startTime = millis();
+  _printf("Tiempo 1: %d\n", startTime);
+  unsigned int dataTransmitted = false;
+
+  //Keep checking radio status until it has completed
+  while (!dataTransmitted) {
+    //Wait some time between spamming SPI status commands, asking if the chip is ready yet
+    //Some commands take a bit before the radio even changes into a busy state,
+    //so if we check too fast we might pre-maturely think we're done processing the command
+    //3ms delay gives inconsistent results.  4ms seems stable.  Using 5ms to be safe
+    _delay_ms(5);
+
+    //Ask the radio for a status update
+    digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+    spiBuff[0] = 0xC0;          //Opcode for "getStatus" command
+    spiBuff[1] = 0x00;          //Dummy byte, status will overwrite this byte
+    SPI_transfer(spiBuff, 2);
+    digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+
+    //Parse out the status (see datasheet for what each bit means)
+    uint8_t chipMode = (spiBuff[1] >> 4) & 0x7;     //Chip mode is bits [6:4] (3-bits)
+    uint8_t commandStatus = (spiBuff[1] >> 1) & 0x7;//Command status is bits [3:1] (3-bits)
+
+    //Status 0, 1, 2 mean we're still busy.  Anything else means we're done.
+    //Commands 3-6 = command timeout, command processing error, failure to execute command, and Tx Done (respoectively)
+    if (commandStatus != 0 && commandStatus != 1 && commandStatus != 2) {
+	  _printf("Transmitido1\n");
+      dataTransmitted = true;
+    }
+
+    //If we're in standby mode, we don't need to wait at all
+    //0x03 = STBY_XOSC, 0x02= STBY_RC
+    if (chipMode == 0x03 || chipMode == 0x02) {
+	  _printf("Transmitido2\n");
+      dataTransmitted = true;
+    }
+
+    //Avoid infinite loop by implementing a timeout
+    if (millis() - startTime >= timeout) {
+		_printf("Tiemo 2 %d\n", millis());
+      return false;
+    }
+  }
+  
+  _printf("WE did it\n");
+  return true;
+}
+
+
+//Sets the radio into receive mode, allowing it to listen for incoming packets.
+//If radio is already in receive mode, this does nothing.
+//There's no such thing as "setModeTransmit" because it is set automatically when transmit() is called
+void LoraSx1262_setModeReceive() {
+  if (inReceiveMode) { return; }  //We're already in receive mode, this would do nothing
+  //LO FORZAMOS SOLO A TRANSMITIR
+  GPOUT &= ~(1<<1); // L_TX = 0
+  GPOUT |=  (1<<0); // L_RX = 1
+  
+  //Set packet parameters
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x8C;          //Opcode for "SetPacketParameters"
+  spiBuff[1] = 0x00;          //PacketParam1 = Preamble Len MSB
+  spiBuff[2] = 0x08;          //PacketParam2 = Preamble Len LSB
+  spiBuff[3] = 0x00;          //PacketParam3 = Header Type. 0x00 = Variable Len, 0x01 = Fixed Length
+  spiBuff[4] = 0xFF;          //PacketParam4 = Payload Length (Max is 255 bytes)
+  spiBuff[5] = 0x00;          //PacketParam5 = CRC Type. 0x00 = Off, 0x01 = on
+  spiBuff[6] = 0x00;          //PacketParam6 = Invert IQ.  0x00 = Standard, 0x01 = Inverted
+  SPI_transfer(spiBuff, 7);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(100);
+
+  // Tell the chip to wait for it to receive a packet.
+  // Based on our previous config, this should throw an interrupt when we get a packet
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x82;          //0x82 is the opcode for "SetRX"
+  spiBuff[1] = 0xFF;          //24-bit timeout, 0xFFFFFF means no timeout
+  spiBuff[2] = 0xFF;          // ^^
+  spiBuff[3] = 0xFF;          // ^^
+  SPI_transfer(spiBuff, 4);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(100);
+
+  //Remember that we're in receive mode so we don't need to run this code again unnecessarily
+  unsigned int  inReceiveMode = true;
+}
+
+
+int LoraSx1262_lora_receive_async(uint8_t* buff, int buffMaxLen) {
+  LoraSx1262_setModeReceive(); //Sets the mode to receive (if not already in receive mode)
+  _printf("\n\n\n");
+  _printf("INICIANDO RECEPCION");
+  //Radio pin DIO1 (interrupt) goes high when we have a packet ready.  If it's low, there's no packet yet
+  if ((GPIN & (1<<1)) == false) { return -1; } //Return -1, meanining no packet ready
+  _printf("INICIANDO RECEPCION");
+  //Tell the radio to clear the interrupt, and set the pin back inactive.
+  while ((GPIN & (1<<1))) {
+    //Clear all interrupt flags.  This should result in the interrupt pin going low
+    digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+    spiBuff[0] = 0x02;          //Opcode for ClearIRQStatus command
+    spiBuff[1] = 0xFF;          //IRQ bits to clear (MSB) (0xFFFF means clear all interrupts)
+    spiBuff[2] = 0xFF;          //IRQ bits to clear (LSB)
+    SPI_transfer(spiBuff, 3);
+    digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  }
+  _printf("\n LIMPIAMOS INTERRUPCIONES");
+
+  // (Optional) Read the packet status info from the radio.
+  // This is things like radio strength, noise, etc.
+  // See datasheet 13.5.3 for more info
+  // This provides debug info about the packet we received
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x14;          //Opcode for get packet status
+  spiBuff[1] = 0xFF;          //Dummy byte. Returns status
+  spiBuff[2] = 0xFF;          //Dummy byte. Returns rssi
+  spiBuff[3] = 0xFF;          //Dummy byte. Returns snd
+  spiBuff[4] = 0xFF;          //Dummy byte. Returns signal RSSI
+  SPI_transfer(spiBuff, 5);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+
+  //Store these values as class variables so they can be accessed if needed
+  //Documentation for what these variables mean can be found in the .h file
+  unsigned int rssi       = -((int)spiBuff[2]) / 2;  //"Average over last packet received of RSSI. Actual signal power is –RssiPkt/2 (dBm)"
+  unsigned int snr        =  ((int8_t)spiBuff[3]) / 4;   //SNR is returned as a SIGNED byte, so we need to do some conversion first
+  unsigned int signalRssi = -((int)spiBuff[4]) / 2;
+    
+   _printf("RSSI: %d\n", rssi);
+   _printf("SNR: %d\n", snr);
+   _printf("Signal_RSSI: %d\n", signalRssi);
+   
+  //We're almost ready to read the packet from the radio
+  //But first we have to know how big the packet is, and where in the radio memory it is stored
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x13;          //Opcode for GetRxBufferStatus command
+  spiBuff[1] = 0xFF;          //Dummy.  Returns radio status
+  spiBuff[2] = 0xFF;          //Dummy.  Returns loraPacketLength
+  spiBuff[3] = 0xFF;          //Dummy.  Returns memory offset (address)
+  SPI_transfer(spiBuff, 4);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+
+  uint8_t payloadLen = spiBuff[2];    //How long the lora packet is
+  uint8_t startAddress = spiBuff[3];  //Where in 1262 memory is the packet stored
+
+  //Make sure we don't overflow the buffer if the packet is larger than our buffer
+  if (buffMaxLen < payloadLen) {payloadLen = buffMaxLen;}
+
+  //Read the radio buffer from the SX1262 into the user-supplied buffer
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x1E;          //Opcode for ReadBuffer command
+  spiBuff[1] = startAddress;  //SX1262 memory location to start reading from
+  spiBuff[2] = 0x00;          //Dummy byte
+  SPI_transfer(spiBuff, 3);    //Send commands to get read started
+  SPI_transfer(buff,payloadLen);  //Get the contents from the radio and store it into the user provided buffer
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _printf("Paquete: ");
+  _printf("%d\n",buff);
+
+  return payloadLen;  //Return how many bytes we actually read
+}
+
+
+int LoraSx1262_lora_receive_blocking(uint8_t *buff, int buffMaxLen, uint32_t timeout) {
+  LoraSx1262_setModeReceive(); //Sets the mode to receive (if not already in receive mode)
+ 
+  uint32_t startTime = millis();
+  uint32_t elapsed = startTime;
+
+  //Wait for radio interrupt pin to go high, indicating a packet was received, or if we hit our timeout
+  while (digitalRead(SX1262_DIO1) == false) {
+    //If user specified a timeout, check if we hit it
+    if (timeout > 0) {
+      elapsed = millis() - startTime;
+      if (elapsed >= timeout) {
+        return -1;    //Return error, saying that we hit our timeout
+      }
+    }
+  }
+  
+  //If our pin went high, then we got a packet!  Return it
+  return LoraSx1262_lora_receive_async(buff,buffMaxLen);
+}
+
+
+void LoraSx1262_updateRadioFrequency() {
+  //Set PLL frequency (this is a complicated math equation.  See datasheet entry for SetRfFrequency)
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x86;  //Opcode for set RF Frequencty
+  spiBuff[1] = (LoraSx1262_pllFrequency >> 24) & 0xFF;  //MSB of pll frequency
+  spiBuff[2] = (LoraSx1262_pllFrequency >> 16) & 0xFF;  //
+  spiBuff[3] = (LoraSx1262_pllFrequency >>  8) & 0xFF;  //
+  spiBuff[4] = (LoraSx1262_pllFrequency >>  0) & 0xFF;  //LSB of requency
+  SPI_transfer(spiBuff, 5);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100);                  //Give time for the radio to proces command
+}
+
+
+void LoraSx1262_updateModulationParameters() {
+  /*Set modulation parameters
+  # Modulation parameters are:
+  #  - SpreadingFactor
+  #  - Bandwidth
+  #  - CodingRate
+  #  - LowDataRateOptimize
+  # None of these actually matter that much.  You can set them to anything, and data will still show up
+  # on a radio frequency monitor.
+  # You just MUST call "setModulationParameters", otherwise the radio won't work at all*/
+  digitalWrite(SX1262_NSS, 0);      //Enable radio chip-select
+  spiBuff[0] = 0x8B;                //Opcode for "SetModulationParameters"
+  spiBuff[1] = LoraSx1262_spreadingFactor;     //ModParam1 = Spreading Factor.  Can be SF5-SF12, written in hex (0x05-0x0C)
+  spiBuff[2] = LoraSx1262_bandwidth;           //ModParam2 = Bandwidth.  See Datasheet 13.4.5.2 for details. 0x00=7.81khz (slowest)
+  spiBuff[3] = LoraSx1262_codingRate;          //ModParam3 = CodingRate.  Semtech recommends CR_4_5 (which is 0x01).  Options are 0x01-0x04, which correspond to coding rate 5-8 respectively
+  spiBuff[4] = LoraSx1262_lowDataRateOptimize; //LowDataRateOptimize.  0x00 = 0ff, 0x01 = On.  Required to be on for SF11 + SF12
+  SPI_transfer(spiBuff, 5);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100);                  //Give time for radio to process the command
+
+  //Come up with a reasonable timeout for transmissions
+  //SF12 is painfully slow, so we want a nice long timeout for that,
+  //but we really don't want someone using SF5 to have to wait MINUTES for a timeout
+  //I came up with these timeouts by measuring how long it actually took to transmit a packet
+  //at each spreading factor with a MAX 255-byte payload and 7khz Bandwitdh (the slowest one)
+  switch (LoraSx1262_spreadingFactor) {
+    case 12:
+      LoraSx1262_transmitTimeout = 252000; //Actual tx time 126 seconds
+      break;
+    case 11:
+      LoraSx1262_transmitTimeout = 160000; //Actual tx time 81 seconds
+      break;
+    case 10:
+      LoraSx1262_transmitTimeout = 60000; //Actual tx time 36 seconds
+      break;
+    case 9:
+      LoraSx1262_transmitTimeout = 40000; //Actual tx time 20 seconds
+      break;
+    case 8:
+      LoraSx1262_transmitTimeout = 20000; //Actual tx time 11 seconds
+      break;
+    case 7:
+      LoraSx1262_transmitTimeout = 12000; //Actual tx time 6.3 seconds
+      break;
+    case 6:
+      LoraSx1262_transmitTimeout = 7000; //Actual tx time 3.7s seconds
+      break;
+    default:  //SF5
+      LoraSx1262_transmitTimeout = 5000; //Actual tx time 2.2 seconds
+      break;
+  }
+}
+
+
+unsigned int LoraSx1262_configSetPreset(int preset) {
+  if (preset == PRESET_DEFAULT) {
+    LoraSx1262_bandwidth = 5;            //250khz
+    LoraSx1262_codingRate = 1;           //CR_4_5
+    LoraSx1262_spreadingFactor = 7;      //SF7
+    LoraSx1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    LoraSx1262_updateModulationParameters();
+    return true;
+  }
+
+  if (preset == PRESET_LONGRANGE) {
+    LoraSx1262_bandwidth = 4;            //125khz
+    LoraSx1262_codingRate = 1;           //CR_4_5
+    LoraSx1262_spreadingFactor = 7;      //SF7 (changed)
+    LoraSx1262_lowDataRateOptimize = 0;  //Optimize for low data rate (SF12 only)
+    LoraSx1262_updateModulationParameters();
+    return true;
+  }
+
+  if (preset == PRESET_FAST) {
+    LoraSx1262_bandwidth = 6;            //500khz
+    LoraSx1262_codingRate = 1;           //CR_4_5
+    LoraSx1262_spreadingFactor = 5;      //SF5
+    LoraSx1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    LoraSx1262_updateModulationParameters();
+    return true;
+  }
+
+  //Invalid preset specified
+  return false;
+}
+
+
+unsigned int LoraSx1262_configSetFrequency(long frequencyInHz) {
+  //Make sure the specified frequency is in the valid range.
+  if (frequencyInHz < 150000000 || frequencyInHz > 960000000) { return false;}
+
+  //Calculate the PLL frequency (See datasheet section 13.4.1 for calculation)
+  //PLL frequency controls the radio's clock multipler to achieve the desired frequency
+  LoraSx1262_pllFrequency = LoraSx1262_frequencyToPLL(frequencyInHz);
+  LoraSx1262_updateRadioFrequency();
+  _printf("La frecuencia ha sido fijada a: %d\n", frequencyInHz);
+  _printf("La frecuencia del PLL a: %d\n", LoraSx1262_pllFrequency);
+  return true;
+}
+
+
+unsigned int LoraSx1262_configSetBandwidth(int bandwidth) {
+  //Bandwidth setting must be 0-10 (excluding 7 for some reason)
+  if (bandwidth < 0 || bandwidth > 0x0A || bandwidth == 7) { return false; }
+  LoraSx1262_bandwidth = bandwidth;
+  LoraSx1262_updateModulationParameters();
+  return true;
+}
+
+
+unsigned int LoraSx1262_configSetCodingRate(int codingRate) {
+  //Coding rate must be 1-4 (inclusive)
+  if (codingRate < 1 || codingRate > 4) { return false; }
+  LoraSx1262_codingRate = codingRate;
+  LoraSx1262_updateModulationParameters();
+  return true;
+}
+
+
+unsigned int LoraSx126_configSetSpreadingFactor(int spreadingFactor) {
+  if (spreadingFactor < 5 || spreadingFactor > 12) { return false; }
+
+  //The datasheet highly recommends enabling "LowDataRateOptimize" for SF11 and SF12
+  LoraSx1262_lowDataRateOptimize = (spreadingFactor >= 11) ? 1 : 0;  //Turn on for SF11+SF12, turn off for anything else
+  LoraSx1262_spreadingFactor = spreadingFactor;
+  LoraSx1262_updateModulationParameters();
+  return true;
+}
+
+
+uint32_t LoraSx1262_frequencyToPLL(long rfFreq) {
+  /* Datasheet Says:
+	 *		rfFreq = (pllFreq * xtalFreq) / 2^25
+	 * Rewrite to solve for pllFreq
+	 *		pllFreq = (2^25 * rfFreq)/xtalFreq
+	 *
+	 *	In our case, xtalFreq is 32mhz
+	 *	pllFreq = (2^25 * rfFreq) / 32000000
+	 */
+
+	//Basically, we need to do "return ((1 << 25) * rfFreq) / 32000000L"
+  //It's very important to perform this without losing precision or integer overflow.
+  //If arduino supported 64-bit varibales (which it doesn't), we could just do this:
+  //    uint64_t firstPart = (1 << 25) * (uint64_t)rfFreq;
+  //    return (uint32_t)(firstPart / 32000000L);
+  //
+  //Instead, we need to break this up mathimatically to avoid integer overflow
+  //First, we'll simplify the equation by dividing both parts by 2048 (2^11)
+  //    ((1 << 25) * rfFreq) / 32000000L      -->      (16384 * rfFreq) / 15625;
+  //
+  // Now, we'll divide first, then multiply (multiplying first would cause integer overflow)
+  // Because we're dividing, we need to keep track of the remainder to avoid losing precision
+  uint32_t q = rfFreq / 15625UL;  //Gives us the result (quotient), rounded down to the nearest integer
+  uint32_t r = rfFreq % 15625UL;  //Everything that isn't divisible, aka "the part that hasn't been divided yet"
+
+  //Multiply by 16384 to satisfy the equation above
+  q *= 16384UL;
+  r *= 16384UL; //Don't forget, this part still needs to be divided because it was too small to divide before
+  
+  return q + (r / 15625UL);  //Finally divide the the remainder part before adding it back in with the quotient
+}
+
+
+/*
+
+uint32_t my_millis(){
+  struct timespec t ;
+  clock_gettime ( CLOCK_MONOTONIC_RAW , & t ) ; // change CLOCK_MONOTONIC_RAW to CLOCK_MONOTONIC on non linux computers
+  return t.tv_sec * 1000 + ( t.tv_nsec + 500000 ) / 1000000 ;
+} */
+
+
+
+
+================================================
+FILE: Firmware/LoRa.h
+================================================
+/*
+* License: Creative Commons 4.0 - Attribution, NonCommercial
+* https://creativecommons.org/licenses/by-nc/4.0/
+* Author: Mitch Davis (2023). github.com/thekakester
+* 
+* You are free to:
+*    Share — copy and redistribute the material in any medium or format
+*    Adapt — remix, transform, and build upon the material
+* Under the following terms:
+*    Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+*                  You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+*    NonCommercial — You may not use the material for commercial purposes.
+*
+* No warranties are given. The license may not give you all of the permissions necessary for your intended use.
+* For example, other rights such as publicity, privacy, or moral rights may limit how you use the material
+*/
+
+#ifndef __LORA1262__
+#define __LORA1262__
+
+//#include <Arduino.h>
+//#include <SPI.h>
+
+/* Wiring requirements (for default shield pinout)
+# +-----------------+-------------+------------+
+# | Description     | Arduino Pin | Sx1262 Pin |
+# +-----------------+-------------+------------+
+# | Power (3v3)     | 3v3         | 3v3        |
+# | GND             | GND         | GND        |
+# | Radio Reset     | A0          | SX_NRESET  |
+# | Busy (optional) | D3          | BUSY       |
+# | Radio Interrupt | D5          | DIO1       |
+# | SPI SCK         | 13          | SCK        |
+# | SPI MOSI        | D11         | MOSI       |
+# | SPI MISO        | D12         | MISO       |
+# | SPI CS          | D7          | NSS        |
+# +-----------------+----------+------------+
+*/
+
+//Pin configurations (for Arduino UNO)
+/*
+#define SX1262_NSS   7
+#define SX1262_RESET A0
+*/
+
+
+//Presets. These help make radio config easier
+#define PRESET_DEFAULT    0
+#define PRESET_LONGRANGE  1
+#define PRESET_FAST       2
+
+
+typedef struct{
+  int rssi;
+  int snr;
+  unsigned int inReceiveMode;
+  int signalRssi;
+} LoraSx1262;
+
+
+unsigned char SPI_transfer(unsigned char *lista, int n);
+unsigned int LoraSx1262_begin();
+unsigned int LoraSx1262_sanityCheck();
+void LoraSx1262_transmit(uint8_t *data, int dataLen);
+int LoraSx1262_lora_receive_async(uint8_t* buff, int buffMaxLen);
+int LoraSx1262_lora_receive_blocking(uint8_t* buff, int buffMaxLen, uint32_t timeout);
+unsigned int LoraSx1262_configSetPreset(int preset);
+unsigned int LoraSx1262_configSetFrequency(long frequencyInHz);
+unsigned int LoraSx1262_configSetBandwidth(int bandwidth);
+unsigned int LoraSx1262_configSetCodingRate(int codingRate);
+unsigned int LoraSx1262_configSetSpreadingFactor(int spreadingFactor);
+uint32_t LoraSx1262_frequencyToPLL(long freqInHz);
+
+
+// Funciones privadas (declaración, implementación en tu código)
+static void LoraSx1262_setModeReceive();
+static void LoraSx1262_configureRadioEssentials();
+static unsigned int LoraSx1262_waitForRadioCommandCompletion(uint32_t timeout);
+static void LoraSx1262_updateRadioFrequency();
+static void LoraSx1262_updateModulationParameters();
+
+
+
+/*
+class LoraSx1262 {
+  public:
+    bool begin();
+    bool sanityCheck(); /*Returns true if we have an active SPI communication with the radio
+    void transmit(byte* data, int dataLen);
+    int lora_receive_async(byte* buff, int buffMaxLen); /*Checks to see if a lora packet was received yet, returns the packet if available
+    int lora_receive_blocking(byte* buff, int buffMaxLen, uint32_t timeout); /*Waits until a packet is received, with an optional timeout
+
+    //Radio configuration (optional)
+    bool configSetPreset(int preset);
+    bool configSetFrequency(long frequencyInHz);
+    bool configSetBandwidth(int bandwidth);
+    bool configSetCodingRate(int codingRate);
+    bool configSetSpreadingFactor(int spreadingFactor);
+    
+    //These variables show signal quality, and are updated automatically whenever a packet is received
+    int rssi = 0;
+    int snr = 0;
+    int signalRssi = 0;
+
+    uint32_t frequencyToPLL(long freqInHz);
+
+  private:
+    void setModeReceive();  //Puts the radio in receive mode, allowing it to receive packets
+    void configureRadioEssentials();
+    unsigned int waitForRadioCommandCompletion(uint32_t timeout);
+    void updateRadioFrequency();
+    void updateModulationParameters();
+    unsigned int inReceiveMode = 0;
+    uint8_t spiBuff[32];   //Buffer for sending SPI commands to radio
+
+    //Config variables (set to PRESET_DEFAULT on init)
+    uint32_t pllFrequency;
+    uint8_t bandwidth;
+    uint8_t codingRate;
+    uint8_t spreadingFactor;
+    uint8_t lowDataRateOptimize;
+    uint32_t transmitTimeout; //Worst-case transmit time depends on some factors
+};
+*/
+#endif
+
+
+================================================
+FILE: Firmware/main.c
+================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
+ 
+#include "ModuloBME.h"
+#include "ModuloGPS.h" 
+#include "SPI.h"
+#include "LoRa.h"
+#include "MCP3004.h"
+#include "ModuloMQ9.h"
+
+typedef unsigned char  u8;
+typedef unsigned short u16;
+typedef unsigned int   u32;
+  
+typedef signed char  s8; 
+typedef signed short s16;   
+typedef signed int   s32;
+ 
+volatile int estado; 
+volatile int lectura_CO;   
+volatile int lectura_CH4;  
+ 
+
+//-- Registros mapeados, declaramos los registros, el nombre debe coincidir 
+#define UARTDAT  (*(volatile uint8_t*)0xE0000000)
+#define UARTSTA  (*(volatile uint32_t*)0xE0000004)
+#define UARTBAUD (*(volatile uint32_t*)0xE0000004)  
+
+//CHANGED UART1 UART2
+
+#define UART1DAT  (*(volatile uint8_t*)0xE0000008)
+#define UART1STA  (*(volatile uint32_t*)0xE000000C)
+#define UART1BAUD (*(volatile uint32_t*)0xE000000C)
+  
+#define UART2DAT  (*(volatile uint8_t*)0xE0000010)
+#define UART2STA  (*(volatile uint32_t*)0xE0000014)
+#define UART2BAUD (*(volatile uint32_t*)0xE0000014)
+ 
+ 
+#define SPIDAT	 (*(volatile uint32_t*)0xE0000020)
+#define SPICTRL	 (*(volatile uint32_t*)0xE0000024)
+#define SPISTA	 (*(volatile uint32_t*)0xE0000024)
+#define SPISS	 (*(volatile uint32_t*)0xE0000028)  
+
+//CHANGED SPI1
+
+#define SPI1DAT	 (*(volatile uint32_t*)0xE0000030)
+#define SPI1CTRL (*(volatile uint32_t*)0xE0000034)
+#define SPI1STA	 (*(volatile uint32_t*)0xE0000034)
+#define SPI1SS	 (*(volatile uint32_t*)0xE0000038) 
+
+#define TIMER    (*(volatile uint32_t*)0xE0000060)
+
+//CHANGED GP
+
+#define GPOUT    (*(volatile uint32_t*)0xE0000080)
+#define GPIN     (*(volatile uint32_t*)0xE0000084)
+      
+//CHANGED IRQs
+    
+#define IRQEN	 (*(volatile uint32_t*)0xE00000C0)	//Enable
+#define IRQVECT0 (*(volatile uint32_t*)0xE00000E0)	//TRAP
+#define IRQVECT1 (*(volatile uint32_t*)0xE00000E4)	//RX0
+#define IRQVECT2 (*(volatile uint32_t*)0xE00000E8)	//TX0
+#define IRQVECT3 (*(volatile uint32_t*)0xE00000EC)	//Timer
+#define IRQVECT4 (*(volatile uint32_t*)0xE00000F0)	//RX1
+#define IRQVECT5 (*(volatile uint32_t*)0xE00000F4)	//TX1
+#define IRQVECT6 (*(volatile uint32_t*)0xE00000F8)	//RX2
+#define IRQVECT7 (*(volatile uint32_t*)0xE00000FC)	//TX2
+
+
+void delay_loop(uint32_t val);	// (3 + 3*val) cycles
+#define CCLK (18000000)
+#define _delay_us(n) delay_loop((n*(CCLK/1000)-3000)/3000)
+#define _delay_ms(n) delay_loop((n*(CCLK/1000)-30)/3)
+ 
+//GPOUT CHANGED 
+/*
+#define ice_led1 (0b00000001) //GPOUT0 -> ice_led1
+#define ice_led2 (0b00000010) //GPOUT1 -> ice_led2
+#define ice_led3 (0b00000100) //GPOUT2 -> ice_led3
+#define ice_led4 (0b00001000) //GPOUT3 -> ice_led4
+#define STEPUP_CE (0b00010000) //GPOUT4 -> STEPUP_CE
+#define GAS_5V_CTRL (0b00100000) //GPOUT5 -> GAS_5V_CTRL
+#define GAS_1V4_CTRL (0b01000000) //GPOUT6 -> GAS_1V4_CTRL
+#define DUST_CTRL (0b10000000) //GPOUT7 -> DUST_CTRL 
+*/
+ 
+void _putch(int c)
+{
+	while((UARTSTA&2)==0);
+	//if (c == '\n') _putch('\r');
+	UARTDAT = c;
+}
+
+void _puts(const char *p)
+{
+	while (*p)
+		_putch(*(p++));
+}
+ 
+/*
+uint8_t _getch()
+{
+	while((UARTSTA&1)==0);
+	return UARTDAT;
+}
+
+uint8_t haschar() {return UARTSTA&1;}
+*/
+
+// --------------------------------------------------------
+//FIFOs
+uint8_t udat[32];				//FIFO UART0
+volatile uint8_t rdix,wrix;		//Punteros de lectura y escritura
+
+//CHANGED
+uint8_t udat1[32]; 				//FIFO UART1
+volatile uint8_t rdix1,wrix1; 	//Punteros de lectura y escritura
+
+uint8_t udat2[32]; 				//FIFO UART2
+volatile uint8_t rdix2,wrix2; 	//Punteros de lectura y escritura
+
+//Lectura UART0
+uint8_t _getchUART0()
+{
+	uint8_t d;
+	while(rdix==wrix);
+	d=udat[rdix++];
+	rdix&=31;
+	return d;
+}
+
+//Lectura UART1 (para GPS)
+uint8_t _getchUART1()
+{
+	uint8_t d;
+	while(rdix1==wrix1);
+	d=udat1[rdix1++];
+	rdix1&=127;
+	return d;
+}
+
+#define putchar(d) _putch(d)
+#include "printf.c"
+#include "ModuloGPS.c" 
+#include "ModuloBME.c"
+#include "SPI.c"
+#include "LoRa.c"
+#include "MCP3004.c"
+#include "ModuloMQ9.c"
+ 
+const static char *menutxt="\n"
+"\n\n"
+"888                8888888b.  888     888\n"         
+"888                888   Y88b 888     888\n"        
+"888                888    888 888     888\n"       
+"888        8888b.  888   d88P Y88b   d88P 8888b.\n"  
+"888           '88b 8888888P'   Y88b d88P     '88b\n"
+"888       .d888888 888 T88b     Y88o88P  .d888888\n" 
+"888888888 888  888 888  T88b     Y888P   888  888\n"
+"888888888 'Y888888 888   T88b     Y8P    'Y888888\n"
+"\nIts Alive :-)\n" 
+"\n";             
+
+                  
+uint8_t haschar() {return wrix-rdix;}
+
+uint32_t __attribute__((naked)) getMEPC()
+{
+	asm volatile(
+	//"	csrrw	a0,0x341,zero	\n"
+	//"	csrrw	zero,0x341,a0	\n"
+	"	.word	0x34101573 		\n"
+	"	.word   0x34151073		\n"
+	"	ret						\n"
+	);
+}
+
+
+//INTERRUPCIONES
+
+void __attribute__((interrupt ("machine"))) irq0_handler()
+{
+	_printf("\nTRAP at 0x%x\n",getMEPC());
+}
+
+// UART RX
+void __attribute__((interrupt ("machine"))) irq1_handler()
+{ 
+	udat[wrix++]=UARTDAT;
+	wrix&=31;
+} 
+// UART TX
+void  __attribute__((interrupt ("machine"))) irq2_handler(){
+	static uint8_t a=32;
+	UARTDAT=a;
+	if (++a>=128) a=32;
+} 
+	 
+// TIMER
+void __attribute__((interrupt("machine"))) irq3_handler()
+{
+	IRQEN = 0b00000000;	//Deshabilitamos la interrupción del timer
+	switch(estado){ 
+		case 0: 
+			Lectura_C0();
+			break;
+		case 1:
+			Lectura_CH4();
+			break;
+		case 2:
+			_printf("Medidas obtenidas. \n");
+			break;
+			
+		default:
+			break;
+	}
+	//_printf("Fin interrupcion");
+}
+
+// UART RX1
+void __attribute__((interrupt("machine"))) irq4_handler()
+{
+	lectura_GPS();
+	IRQEN = 0b00000000;
+}
+
+// UART TX1
+void __attribute__((interrupt("machine"))) irq5_handler()
+{
+	static uint8_t a = 32;
+	UART1DAT = a;
+	if (++a >= 128)
+		a = 32;
+}
+
+// UART RX2
+void __attribute__((interrupt("machine"))) irq6_handler()
+{
+	static uint8_t a = 32;
+	UART2DAT = a;
+	if (++a >= 128)
+		a = 32;
+}
+
+// UART TX2
+void __attribute__((interrupt("machine"))) irq7_handler()
+{
+	static uint8_t a = 32;
+	UART2DAT = a;
+	if (++a >= 128)
+		a = 32;
+}
+
+// --------------------------------------------------------
+
+#define BAUD 115200
+#define BAUD1 9600
+#define BAUD2 9600
+#define NULL ((void *)0)
+
+
+const static char *menu="\n"
+"==================================================\n"
+"=================== MENU INICIAL =================\n"
+"==================================================\n"
+"|                                                |\n"
+"|    Seleccione: s -> Valores de los sensores    |\n"
+"|    Seleccione: f -> Sensor de gases            |\n"
+"|    Seleccione: r -> Recibir LoRa               |\n"
+"|    Seleccione: t -> Transmitir LoRa            |\n"
+"|    Seleccione: g -> GPS                        |\n"
+"|    Seleccione: e -> Logo del equipo            |\n"
+"|    Seleccione: c -> Creditos                   |\n"
+"|    Seleccione: q -> Salir                      |\n"
+"|                                                |\n"
+"=================================================\n"
+"Software Developed by: @The_Bomb_Projects & UVa  \n"
+"=================================================\n"
+"\n\n";
+ 
+const static char *nombres="\n"
+"------------- INTEGRANTES DEL EQUIPO -----------\n"
+"|                                              |\n"
+"|      @THE BOMB PROJECTS                      |\n"
+"|                                              |\n"
+"|      -> Ing. Guillermo Chico Delgado         |\n"
+"|      -> Ing. Adolfo Jose Dopico Gonzalez     |\n"
+"|      -> Ing. Alejandro Martinez de Abajo     |\n"
+"|      -> Ing. Alvaro Pascual Cabrero          |\n"
+"|                                              |\n"
+"------------------------------------------------\n"
+"\n\n";
+
+ const static char *logo="\n"    
+"                                :*%*-#%-         					   \n"              
+"                    :%%:        .%%  -%#      ..:                     \n"
+"                 =%+. ..        +%#*%*:    -%%%-..:%.                 \n"
+"                 .%%. #.       .%*=*%%%. .#%%.     #%.                \n"
+"          .*      %%%#:= .     ++:::=%#  -%#     .+%%.                \n"
+"         .%%=     :%%   .#   :*+-.==:.   :%-    .%%%.      :          \n"
+"      .*.   -%%.   +%#.  .+******=-:---          *::=%#+..%%#.        \n"
+"     :%%%..+=.%%*.-.  .=*##########***+:          .%   .%%#.          \n"
+"       :%%%.  .+%.  .*#%%%%%%%%###******+.           -%%%+++++*#%:    \n"
+"  .     .#%#.  =  .:#%%@*:.*%%%##*++==+***-.     .......  .:+%%%#**.  \n"
+"  +%+    .-%%++  .==%@@*-:.*%%%##*+=--=+***+.  .===++++*%%%%+..       \n"
+" .#        .%.  .=-%@@@+=-.#%%%%##*++++**##*+. =+++=**++==            \n"
+" -%%-.          .=*%@@@==-=@%%%%%####*######*=.#+++  **+=#..       .  \n"
+" *.=%%%*.  .    .-%%@@@@*%@@@@%%%%%%%##%%%%##+.*+++-:=++-:%%%%%%%%%%: \n"
+"-%:   :#%%%+    .#%%@@@@@@@@@@@@%%%%%%%%%%%%#**----=+++=. #.   *..:-+ \n"
+"  ..     .%     .*#%@@@@@@@@@@@@@@%%%%%%%%%%#*#+++++++:   =%-.-%%-:+# \n"
+"            .-=-. +##%%%@@@@@@@@@@@@@@@@@%%#-.#*+++-*++=.             \n"
+"          .=+++**+.=*#%%@@@@@@@@@@@@@@@@%%#: .**+=  =*++.             \n"
+"           -=+++**: .*#%%%@@@@@@@@@@@%%%#+.   .#++=:+=+=.             \n"
+"           .==++**+=****##%%%%%@@@%%%#+-.     .:*+++++=.              \n"
+"            .==++***++-. .-=*#####*=:.++=:.      .:-..                \n"
+"             .==++*+.                ..-====-:.                       \n"
+"              ..=+:.               .++=--:----:                       \n"
+"     .::::.  .:::..   .-=:.  .:::.::***+=--=-=:..::::::=.:=-..        \n"
+"      -%:.%# .%- %%.-%-. .%-  *%  +%. -..%#.  :.=  %: -.%: .=         \n"
+"     .%*.+%:.#%:+#::%=   .%- -%- :%#+*..%#       .%%    +%#.          \n"
+"     =%.    :%.:%  -%.  .#%..%+  *#  ..:%*   ..  :%.  :.  #%.         \n"
+"   .+%%-  .=%%- %%: =%-+%-. +%.:*%#+*%. :%*:*# .=%%=  :%=-%:          \n"
+"                         .*-%.                                        \n"
+"\n\n";
+   
+  
+void main()
+{
+	char c,buf[17];
+	uint8_t *p;
+	unsigned int i,j;
+	int n;
+	void (*pcode)();
+	uint32_t *pi;
+	uint16_t *ps;
+	int temp_comp,press_comp, hum_comp;
+	unsigned char readDATA;
+	   
+	//registro control spi 0
+	SPICTRL = (8<<8)|8;  
+	//registro control spi 1
+	SPI1CTRL = (8<<8)|8;
+	UARTBAUD  =(CCLK+BAUD/2)/BAUD - 1; 
+	//CHANGED
+	UART1BAUD =(CCLK+BAUD1/2)/BAUD1 - 1;	
+	UART2BAUD =(CCLK+BAUD2/2)/BAUD2 - 1;
+         
+	//_delay_ms(100); 
+	c = UARTDAT;		// Clear RX garbage
+	c = UART1DAT;		// Clear RX garbage
+	         
+	//Inicializamos vectores de interrupcion
+	IRQVECT0=(uint32_t)irq0_handler;
+	IRQVECT1=(uint32_t)irq1_handler;
+	IRQVECT2=(uint32_t)irq2_handler;
+	IRQVECT3=(uint32_t)irq3_handler;
+	IRQVECT4=(uint32_t)irq4_handler;
+	IRQVECT5=(uint32_t)irq5_handler;
+	IRQVECT6=(uint32_t)irq6_handler;
+	IRQVECT7=(uint32_t)irq7_handler;
+	         
+	IRQEN=1;			// Enable UART RX IRQ
+	
+	uint8_t Buff[500];
+	
+	asm volatile ("ecall");
+	asm volatile ("ebreak");
+ 
+	//unsigned int inicio = LoraSx1262_begin();
+
+	
+	while (1)      
+	{     
+			_puts(menu);
+			char cmd = _getchUART0();
+			if (cmd > 32 && cmd < 127)
+				//_putch(cmd); 
+			_puts("\n"); 
+           
+			switch (cmd){ 
+			case '2': 
+				IRQEN^=2;	// Toggle IRQ enable for UART TX
+				_delay_ms(100);
+				break;  
+			
+			
+			//Transmisión del LoRa	
+			case 't':   
+				if(LoraSx1262_begin()){
+					_printf("Modulo LoRa iniciado\n");
+					LoraSx1262_transmit("aaoo", 5);
+				}
+				else {
+					_printf("Error al iniciar el LoRa\n");
+				}
+				break;
+
+
+			//Recepción del LoRa
+			case 'r':
+			if(LoraSx1262_begin()){
+					_printf("Modulo LoRa iniciado\n");
+					LoraSx1262_lora_receive_async(Buff, 500);
+				} 
+				else {
+					_printf("Error al iniciar el LoRa\n");
+				}
+				break;
+				
+				
+			//Sensores de humedad, temperatura y presión.	
+			case 's':               
+				startBME680(); 
+			    temp_comp =returnTemp();
+				press_comp = returnPressure();
+				hum_comp = returnHUMIDITY(temp_comp);
+				
+				_printf("----------------------------------------------\n");
+				_printf("--------------- DATOS OBTENIDOS --------------\n");
+				_printf("----------------------------------------------\n");
+				_printf("                                                ");
+				_printf("\n La temperatura registrada es: ");
+				_printf("%02d.%d%c", temp_comp/100, temp_comp%100, 167);
+				_printf("\n La presion registrada es: ");
+				_printf("%d Pascuales",press_comp/100);
+				_printf("\n La humedad registrada es: ");
+				_printf("%02d.%03d%c", hum_comp/1000, hum_comp%1000, 37);
+				_printf("                                              \n");
+				_printf("\n\n");
+				_printf("----------------------------------------------\n");    
+				break;
+				
+				  
+			//GPS 	
+			case 'g': 
+				lectura_GPS();
+				//_printf("Salimos de la funcion\n"); //Aqui no se llega
+				char cmd = _getchUART0(); 
+				break;
+				
+				
+			//Logo
+			case 'e': 
+				_puts(logo);
+				break;
+				
+				
+			//Creditos.
+			case 'c':
+				_puts(nombres);
+				break;  
+				
+			//Eliminar.	
+			case 'q':
+				asm volatile ("jalr zero,zero");
+				break;
+				
+				
+			//Sensor de gases.
+			case 'f':
+				Lectura_Gas();
+				break;
+				
+			default:
+				continue;
+			}
+	}
+}
+
+
+
+================================================
+FILE: Firmware/MCP3004.c
+================================================
+int MCP3004_Read_Reg(unsigned char channel){
+	int aux1, aux2; 			// Variables auxiliares para guardar la información
+	uint32_t aux=0;
+
+	//ESTO NO FUNCIONA xd
+    SPISS = ADC_CS;
+    spixfer(MCP3004_START); 	// Byte de inicio (0b00000001)
+	aux1 = spixfer(channel); 	// Byte de seleccion de canal
+	aux2 = spixfer(0x00);			// Dummy byte para seguir recibiendo información
+	SPISS = 0b11;
+	
+	aux = aux1 << 8;
+	aux|= aux2;
+	
+	return (aux&=0b0000001111111111);
+
+	//return ((aux1 & 0b111)<<8) | aux2;
+}
+
+
+
+================================================
+FILE: Firmware/MCP3004.h
+================================================
+#define ADC_CS 	0b01
+
+#define MCP3004_START 0b00000001	
+#define MCP3004_CH0   0b10000000	
+#define MCP3004_CH1   0b10010000	
+#define MCP3004_CH2   0b10100000
+#define MCP3004_CH3   0b10110000
+
+int MCP3004_Read_Reg(unsigned char channel);
+
+
+
+
+
+================================================
+FILE: Firmware/ModuloBME.c
+================================================
+
+void startBME680(){ //Inicializamos modulo BME
+	//Hacemos reset de los registros del módulo
+	writeBME680(0xB6,RESET_BME);
+
+	writeBME680(0x10,STATUS_BME);
+	// 1.Set humidity oversampling to 1x by writing 0b001 to osrs_h
+	writeBME680(0x01,CTRL_HUM);
+	// 2.Set temperature oversampling to 2x by writing 0b010 to osrs_t
+	// 3.Set pressure oversampling to 16x  by writing 0b101 to osrs_p
+	writeBME680(0x54,CTRL_MEAS);
+	// 4.Set gas_wait_0 to 0x59 to select 100 ms heat up duration
+	writeBME680(0x59,gas_wait0);
+	// 5.Set the corresponding heater set-point by writing the target heater resistance to res_heat_0
+	writeBME680(0x00,res_heat0);
+	// 6.Set nb_conv to 0x0 to select the previously defined heater settings
+	// 7.Set run_gas_l to 1 to enable gas measurements
+	writeBME680(0x10,CTRL_GAS_1);
+	// 8.Set mode to 0b01 to trigger a single measurement.
+	writeBME680(0x55,CTRL_MEAS);
+}
+
+void writeBME680(char data,char dir){
+     SPISS = CS_BME680; //Seleccionamos el chipSelect
+     spixfer(0x00|dir); //Pasamos direccion
+     spixfer(data); //Pasamos dato
+     SPISS = 0b11; //Devolvemos a 1 chip select
+}
+
+char readBME680(char dir){ //Lectura del registro de una direccion de memoria concreta
+    unsigned char readDATA;
+    SPISS = CS_BME680;//Seleccionamos chip select
+	
+    spixfer(0x80|dir); //Lectura del SPI
+    readDATA = spixfer(0); //Enviamos 0
+    SPISS=0b11;
+	//_printf("\n El valor del registro %x: es %d ", dir, readDATA);
+    return readDATA;
+}
+
+int returnTemp(){
+
+    int par_t1, par_t2, par_t3, temp_adc, var1, var2, var3, t_fine, temp_comp;
+
+	writeBME680(0x00,STATUS_BME); //entramos a la página 0 de los registros
+
+    par_t1 = (int32_t)((readBME680(0xEA) << 8) | readBME680(0xE9));
+    par_t2 = (int32_t)((readBME680(0x8B) << 8) | readBME680(0x8A));
+    par_t3 = (int32_t)readBME680(0x8C);
+	
+	writeBME680(0x10,STATUS_BME); //entramos a la página 1 de los registros
+    temp_adc = (int32_t)((readBME680(0x22) << 12) | (readBME680(0x23) << 4) | (readBME680(0x24) >> 4));
+
+    var1 = ((int32_t)temp_adc >> 3) - ((int32_t)par_t1 << 1);
+    var2 = (var1 * (int32_t)par_t2) >> 11;
+    var3 = ((((var1 >> 1) * (var1 >> 1)) >> 12) * ((int32_t)par_t3 << 4)) >> 14;
+    t_fine = var2 + var3;
+    temp_comp = ((t_fine * 5) + 128) >> 8;
+	
+    return temp_comp;
+}
+int returnPressure(){
+
+    int par_p1, par_p2, par_p3, par_p4, par_p5, par_p6, par_p7, par_p8, par_p9, par_p10, press_adc,press_comp;
+    int var1, var2, var3, t_fine;
+	
+	writeBME680(0x00,STATUS_BME); //entramos a la página 0 de los registros
+
+    par_p1 = (int32_t)((readBME680(0x8F) << 8) | readBME680(0x8E));
+    par_p2 = (int32_t)((readBME680(0x91) << 8) | readBME680(0x90));
+    par_p3 = (int32_t)readBME680(0x92);
+    par_p4 = (int32_t)((readBME680(0x95) << 8) | readBME680(0x94));
+    par_p5 = (int32_t)((readBME680(0x97) << 8) | readBME680(0x96));
+    par_p6 = (int32_t)readBME680(0x99);
+    par_p7 = (int32_t)readBME680(0x98);
+    par_p8 = (int32_t)((readBME680(0x9D) << 8) | readBME680(0x9C));
+    par_p9 = (int32_t)((readBME680(0x9F) << 8) | readBME680(0x9E));
+    par_p10 = (int32_t)readBME680(0xA0);
+	
+	writeBME680(0x10,STATUS_BME); //entramos a la página 1 de los registros
+    press_adc = (int32_t)((readBME680(0x1F) << 12) | (readBME680(0x20) << 4) | (readBME680(0x21) >> 4));
+
+    var1 = ((int32_t)t_fine >> 1) - 64000;
+    var2 = ((((var1 >> 2) * (var1 >> 2)) >> 11) * (int32_t)par_p6) >> 2;
+    var2 = var2 + ((var1 * (int32_t)par_p5) << 1);
+    var2 = (var2 >> 2) + ((int32_t)par_p4 << 16);
+    var1 = (((((var1 >> 2) * (var1 >> 2)) >> 13) * ((int32_t)par_p3 << 5)) >> 3) + (((int32_t)par_p2 * var1) >> 1);
+    var1 = var1 >> 18;
+    var1 = ((32768 + var1) * (int32_t)par_p1) >> 15;
+    press_comp = 1048576 - press_adc;
+    press_comp = (uint32_t)((press_comp - (var2 >> 12)) * ((uint32_t)3125));
+    if (press_comp >= (1 << 30)) press_comp = ((press_comp / (uint32_t)var1) << 1);
+    else press_comp = ((press_comp << 1) / (uint32_t)var1);
+    var1 = ((int32_t)par_p9 * (int32_t)(((press_comp >> 3) * (press_comp >> 3)) >> 13)) >> 12;
+    var2 = ((int32_t)(press_comp >> 2) * (int32_t)par_p8) >> 13;
+    var3 = ((int32_t)(press_comp >> 8) * (int32_t)(press_comp >> 8) * (int32_t)(press_comp >> 8) * (int32_t)par_p10) >> 17;
+    press_comp = (int32_t)(press_comp) + ((var1 + var2 + var3 + ((int32_t)par_p7 << 7)) >> 4);
+
+    return press_comp;
+}
+
+int returnHUMIDITY(int temp_comp){
+    int par_h1, par_h2, par_h3, par_h4, par_h5, par_h6, par_h7, hum_adc,temp_scaled, hum_comp;
+	int var1, var2, var3, var4, var5, var6;
+	
+	writeBME680(0x00,STATUS_BME); //entramos a la página 0 de los registros
+	
+    par_h1 = (int32_t)((readBME680(0xE3) << 4) | (readBME680(0xE2) & 0b00001111));
+    par_h2 = (int32_t)((readBME680(0xE1) << 4) | (readBME680(0xE2) >> 4));
+    par_h3 = (int32_t)readBME680(0xE4);
+    par_h4 = (int32_t)readBME680(0xE5);
+    par_h5 = (int32_t)readBME680(0xE6);
+    par_h3 = (int32_t)readBME680(0xE7);
+    par_h3 = (int32_t)readBME680(0xE8);
+	
+	writeBME680(0x10,STATUS_BME); //entramos a la página 1 de los registros
+    hum_adc = (int32_t)((readBME680(0x25) << 8) | readBME680(0x26));
+
+    temp_scaled = (int32_t)temp_comp;
+    var1 = (int32_t)hum_adc - (int32_t)((int32_t)par_h1 << 4) - (((temp_scaled * (int32_t)par_h3) / ((int32_t)100)) >> 1);
+    var2 = ((int32_t)par_h2 * (((temp_scaled * (int32_t)par_h4) / ((int32_t)100)) + (((temp_scaled * ((temp_scaled * (int32_t)par_h5) / ((int32_t)100))) >> 6) / ((int32_t)100)) + ((int32_t)(1 << 14)))) >> 10;
+    var3 = var1 * var2;
+    var4 = (((int32_t)par_h6 << 7) + ((temp_scaled * (int32_t)par_h7) / ((int32_t)100))) >> 4;
+    var5 = ((var3 >> 14) * (var3 >> 14)) >> 10;
+    var6 = (var4 * var5) >> 1;
+    hum_comp = (((var3 + var6) >> 10) * ((int32_t) 1000)) >> 12;
+
+    return hum_comp;
+}
+
+
+
+================================================
+FILE: Firmware/ModuloBME.h
+================================================
+#define CS_BME680 0b10
+
+#define STATUS_BME 0x73 //Status [page]
+#define RESET_BME 0x60
+#define ID_BME 0x50
+
+#define Config_BME 0x75
+#define CTRL_MEAS 0x74
+#define CTRL_HUM 0x72
+#define CTRL_GAS_1 0x71
+#define CTRL_GAS_0 0x70
+
+#define gas_wait0 0x6D
+#define gas_wait1 0x6C
+#define gas_wait2 0x6B
+#define gas_wait3 0x6A
+#define gas_wait4 0x69
+#define gas_wait5 0x68
+#define gas_wait6 0x67
+#define gas_wait7 0x66
+#define gas_wait8 0x65
+#define gas_wait9 0x64
+
+#define res_heat0 0x63
+#define res_heat1 0x62
+#define res_heat2 0x61
+#define res_heat3 0x60
+#define res_heat4 0x5F
+#define res_heat5 0x5E
+#define res_heat6 0x5D
+#define res_heat7 0x5C
+#define res_heat8 0x5B
+#define res_heat9 0x5A
+
+void startBME680();
+void writeBME680(char data,char dir);
+char readBME680(char dir);
+int returnTemp();
+int returnPressure();
+int returnHUMIDITY(int temp_comp);
+
+
+================================================
+FILE: Firmware/ModuloGPS.c
+================================================
+Error reading file with 'UTF-8': 'utf-8' codec can't decode byte 0xf1 in position 1403: invalid continuation byte
+
+
+================================================
+FILE: Firmware/ModuloGPS.h
+================================================
+
+void procesaCadena(const char *cadena, const char delimitador) ;
+void lectura_GPS();
+int mi_strcmp(char *s1, char *s2);
+
+
+================================================
+FILE: Firmware/ModuloMQ9.c
+================================================
+
+void Lectura_Gas(){
+
+	estado=0;	//Reset estado gases
+	ENABLE_5V;	//habilitamos 5V
+	IRQEN = 0b00000100;	//habilitamos la interrupción del timer
+	TIMER = 1 * 1000000; //60s 
+	
+	//_printf("Habilitamos la interrupcion timer\n"); 
+	//_printf("Medicion de C0 en curso, por favor espere 60 seg.\n"); 
+}
+
+void Lectura_C0(){
+	
+	int gas_CO=1;
+		
+	gas_CO = MCP3004_Read_Reg(MCP3004_CH0); //leemos de ADC CH0	- AQUI ESTA EL ERROR
+	//_printf("gas_CO: %d\n", gas_CO);	//LECTURA ERRONEA no permite leer
+	DISABLE_5V_1V4;	//deshabilitamos 5V
+	ENABLE_1V4; //habilitamos 1V4
+	
+	IRQEN = 0b00000100;	//habilitamos la interrupción del timer
+	TIMER = 1 * 1000000; //90s 
+	
+	//_printf("Habilitamos la interrupcion timer\n"); 
+	estado = 1; //Actualizamos estado
+	
+	lectura_CO = (10*(330*gas_CO)) / (1024*7);
+	//_printf("Estado: %d\n", estado);
+	_printf("Medicion de C0 en curso, por favor espere 60 seg.\n"); 
+	_printf("Lectura CO: %d ppm \n", lectura_CO);
+
+	_printf("Medicion de CH4 en curso, por favor espere 90 seg.\n");
+	
+}
+
+void Lectura_CH4(){
+	
+	int gas_CH4=1;
+	
+	gas_CH4 = MCP3004_Read_Reg(MCP3004_CH0); //leemos de ADC
+	//_printf("gas_CH4: %d ppm\n", gas_CH4);
+	
+	DISABLE_5V_1V4;	//deshabilitamos 5V
+	
+	estado = 2; //Actualizamos estado
+	
+	lectura_CH4 = 10*(330*gas_CH4) / (1024);	
+	//_printf("Estado: %d\n", estado);
+	_printf("Lectura CH4: %d ppm \n", lectura_CH4); 
+
+}
+
+
+
+
+================================================
+FILE: Firmware/ModuloMQ9.h
+================================================
+#define ENABLE_5V	(GPOUT = 0b00001000)
+#define ENABLE_1V4	(GPOUT = 0b00010000)
+#define DISABLE_5V_1V4	(GPOUT = 0b00000000)
+
+void Lectura_Gas();
+void Lectura_C0();
+void Lectura_CH4();
+
+
+================================================
+FILE: Firmware/printf.c
+================================================
+/*
+	putchar is the only external dependency for this file,
+	if you have a working putchar, leave it commented out.
+	If not, uncomment the define below and
+	replace outbyte(c) by your own function call.
+
+#define putchar(c) outbyte(c)
+*/
+
+#include <stdarg.h>
+
+static void printchar(char **str, int c)
+{
+	extern void putchar(int c);
+	
+	if (str) {
+		**str = c;
+		++(*str);
+	}
+	else (void)putchar(c);
+}
+
+#define PAD_RIGHT 1
+#define PAD_ZERO 2
+
+static int prints(char **out, const char *string, int width, int pad)
+{
+	register int pc = 0, padchar = ' ';
+
+	if (width > 0) {
+		register int len = 0;
+		register const char *ptr;
+		for (ptr = string; *ptr; ++ptr) ++len;
+		if (len >= width) width = 0;
+		else width -= len;
+		if (pad & PAD_ZERO) padchar = '0';
+	}
+	if (!(pad & PAD_RIGHT)) {
+		for ( ; width > 0; --width) {
+			printchar (out, padchar);
+			++pc;
+		}
+	}
+	for ( ; *string ; ++string) {
+		printchar (out, *string);
+		++pc;
+	}
+	for ( ; width > 0; --width) {
+		printchar (out, padchar);
+		++pc;
+	}
+
+	return pc;
+}
+
+/* the following should be enough for 32 bit int */
+#define PRINT_BUF_LEN 12
+
+static int printi(char **out, int i, int b, int sg, int width, int pad, int letbase)
+{
+	char print_buf[PRINT_BUF_LEN];
+	register char *s;
+	register int t, neg = 0, pc = 0;
+	register unsigned int u = i;
+
+	if (i == 0) {
+		print_buf[0] = '0';
+		print_buf[1] = '\0';
+		return prints (out, print_buf, width, pad);
+	}
+
+	if (sg && b == 10 && i < 0) {
+		neg = 1;
+		u = -i;
+	}
+
+	s = print_buf + PRINT_BUF_LEN-1;
+	*s = '\0';
+
+	while (u) {
+		t = u % b;
+		if( t >= 10 )
+			t += letbase - '0' - 10;
+		*--s = t + '0';
+		u /= b;
+	}
+
+	if (neg) {
+		if( width && (pad & PAD_ZERO) ) {
+			printchar (out, '-');
+			++pc;
+			--width;
+		}
+		else {
+			*--s = '-';
+		}
+	}
+
+	return pc + prints (out, s, width, pad);
+}
+
+static int print(char **out, const char *format, va_list args )
+{
+	register int width, pad;
+	register int pc = 0;
+	char scr[2];
+
+	for (; *format != 0; ++format) {
+		if (*format == '%') {
+			++format;
+			width = pad = 0;
+			if (*format == '\0') break;
+			if (*format == '%') goto out;
+			if (*format == '-') {
+				++format;
+				pad = PAD_RIGHT;
+			}
+			while (*format == '0') {
+				++format;
+				pad |= PAD_ZERO;
+			}
+			for ( ; *format >= '0' && *format <= '9'; ++format) {
+				width *= 10;
+				width += *format - '0';
+			}
+			if( *format == 's' ) {
+				register char *s = (char *)va_arg( args, int );
+				pc += prints (out, s?s:"(null)", width, pad);
+				continue;
+			}
+			if( *format == 'd' ) {
+				pc += printi (out, va_arg( args, int ), 10, 1, width, pad, 'a');
+				continue;
+			}
+			if( *format == 'x' ) {
+				pc += printi (out, va_arg( args, int ), 16, 0, width, pad, 'a');
+				continue;
+			}
+			if( *format == 'X' ) {
+				pc += printi (out, va_arg( args, int ), 16, 0, width, pad, 'A');
+				continue;
+			}
+			if( *format == 'u' ) {
+				pc += printi (out, va_arg( args, int ), 10, 0, width, pad, 'a');
+				continue;
+			}
+			if( *format == 'c' ) {
+				/* char are converted to int then pushed on the stack */
+				scr[0] = (char)va_arg( args, int );
+				scr[1] = '\0';
+				pc += prints (out, scr, width, pad);
+				continue;
+			}
+		}
+		else {
+		out:
+			printchar (out, *format);
+			++pc;
+		}
+	}
+	if (out) **out = '\0';
+	va_end( args );
+	return pc;
+}
+
+int _printf(const char *format, ...)
+{
+        va_list args;
+        
+        va_start( args, format );
+        return print( 0, format, args );
+}
+
+int _sprintf(char *out, const char *format, ...)
+{
+        va_list args;
+        
+        va_start( args, format );
+        return print( &out, format, args );
+}
+
+
+
+================================================
+FILE: Firmware/SPI.c
+================================================
+
+/*	------ 
+
+    SPI Control:   bits 31-14  bits 13-8  bits 7-0 
+                      xxxx        DLEN     DIVIDER 
+
+        DLEN:    Data lenght (8 to 32 bits) 
+        DIVIDER: SCK frequency = Fclk / (2*(DIVIDER+1)) 
+
+    SPI Flags:     bits 31-1  bit 0
+                      xxxx     BUSY 
+
+        BUSY:  SPI exchanging data when 1 
+
+    SPI Slave Select: bits 31-2  bit 1   bit 0 
+                         xxxx     ss1     ss0 
+
+        ss0 : Selects the SPI slave 0 when 0 (active low) 
+        ss1 : Selects the SPI slave 1 when 0 (active low) 
+
+    ------ */
+
+#define FREQ_SPI 1000000
+
+#define DIV_SPI 	((CCLK/(2*FREQ_SPI))-1) 			// Calculamos el divisor para que la frecuencia sea 1MHz
+
+
+// --------------------------------------------------------
+// SPI
+unsigned char spixfer (unsigned char d)
+{
+	SPIDAT=d;
+	while(SPISTA&1);
+	return SPIDAT;
+}
+
+// SPI1
+unsigned char spixfer1 (unsigned char d)
+{
+	SPI1DAT=d;
+	while(SPI1STA&1);
+	return SPI1DAT;
+}
+// --------------------------------------------------------
+
+
+================================================
+FILE: Firmware/SPI.h
+================================================
+
+unsigned char spixfer (unsigned char d);
+unsigned char spixfer1 (unsigned char d);
+

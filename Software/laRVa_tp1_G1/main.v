@@ -50,11 +50,11 @@ module main(
     output EN_1V4_M4,  
     output M2_ON_OFF, 
 
-    // JTAG interface 
-    input  TCK, 
-    input  TMS, 
-    input  TDI, 
-    output TDO 
+	// JTAG interface 
+	input  TCK, 
+	input  TMS, 
+	input  TDI, 
+	output TDO 
 
 );
 
@@ -68,6 +68,11 @@ pll
 	.locked(pll_lock)
 	);
 
+wire [31:0] gpout;
+wire [31:0] gpin;
+
+assign gpin = {30'b0, LORA_DIO1, LORA_BUSY};
+
 // Instance of the system
 SYSTEM sys1 (
     .clk(clk),
@@ -77,9 +82,33 @@ SYSTEM sys1 (
     .rxd_1(RXD1),   
     .txd_1(TXD1),       
     .rxd_2(RXD2),   
-    .txd_2(TXD2)  
+    .txd_2(TXD2),
+    .sck(ICE_SCK),
+    .mosi(ICE_MOSI),
+    .miso(ICE_MISO),
+    .sck1(LORA_SCK),
+    .miso1(LORA_MISO),
+    .mosi1(LORA_MOSI),
+    .gpout(gpout),
+    .gpin(gpin),
+    .ADC_CS(ADC_CS),
+    .BME_CS(BME680_CS),
+    .LORA_CS(LORA_CS)  
 
 );
+
+assign LORA_RESET = gpout[10];
+assign L_RX       = gpout[9];
+assign L_TX       = gpout[8];
+assign EN_5V_UP   = gpout[7];
+assign EN_5V_M4   = gpout[6];
+assign EN_1V4_M4  = gpout[5];
+assign M2_ON_OFF  = gpout[4];
+assign ICE_LED4   = gpout[3];
+assign ICE_LED3   = gpout[2];
+assign ICE_LED2   = gpout[1];
+assign ICE_LED1   = gpout[0];
+assign TDO        = 1'b0;
 
 // Automatic RESET pulse: Reset is held active for 255 cycles after PLL lock
 

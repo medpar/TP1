@@ -22,5 +22,6 @@ uint8_t SX1262_configSetFrequency(long frequencyInHz);
 uint8_t SX1262_configSetBandwidth(int bandwidth);
 uint8_t SX1262_configSetCodingRate(int codingRate);
 uint8_t SX1262_configSetSpreadingFactor(int spreadingFactor);
+void SX1262_readPacketStatus(void);
 
 #endif
