@@ -77,8 +77,8 @@ void     SX1262_updateRadioFrequency();
  
 #define LORA_BUSY   (GPIN & LORA_DIO0)
 
-#define LORA_CS_1  SPI1SS = -1;	// LORA_CS alto
-#define LORA_CS_0  while(LORA_BUSY); SPI1SS = ~1;	// LORA_CS bajo
+#define LORA_CS_1  SPI1SS = 1;	// LORA_CS alto
+#define LORA_CS_0  while(LORA_BUSY); SPI1SS = 0;	// LORA_CS bajo
 
 #define LORA_RESET_1 GPOUT |=  LORA_RESET; // LORA_RESET alto
 #define LORA_RESET_0 GPOUT &= ~LORA_RESET; // LORA_RESET bajo

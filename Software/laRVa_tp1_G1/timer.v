@@ -33,8 +33,6 @@ flagtimer <= 1;
 end 
 else 
 contador <= (contador+1); 
-//Vamos a programarlo para que, si lee el registro (timerrd=1), 
-//baje el flag Y NO CUENTE ESE CICLO 
 end 
 end 
 endmodule

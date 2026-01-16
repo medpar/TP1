@@ -45,6 +45,7 @@ void startBME680(void) {
     
     // 8. Set mode to 0b01 to trigger a single measurement
     writeBME680(0x55, CTRL_MEAS);
+    _delay_ms(100);
 }
 
 /**

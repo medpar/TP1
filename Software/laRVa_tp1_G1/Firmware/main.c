@@ -63,6 +63,14 @@ volatile int state;
 #define L_RX        (1U << 9)
 #define L_TX        (1U << 8)
 
+#define IRQ_TIMER     (1U << 1)
+#define IRQ_UART0_RX  (1U << 2)
+#define IRQ_UART0_TX  (1U << 3)
+#define IRQ_UART1_RX  (1U << 4)
+#define IRQ_UART1_TX  (1U << 5)
+#define IRQ_UART2_RX  (1U << 6)
+#define IRQ_UART2_TX  (1U << 7)
+
 
 //IRQs vectors
 #define IRQEN	 (*(volatile uint32_t*)0xE0000020) //Enable
@@ -79,7 +87,7 @@ volatile int state;
 
 void delay_loop(uint32_t val);	// (3 + 3*val) cyclesç
 
-#define CCLK (18000000)
+#define CCLK (18000000u)
 #define _delay_us(n) delay_loop((n*(CCLK/1000)-3000)/3000)
 #define _delay_ms(n) delay_loop((n*(CCLK/1000)-30)/3)
 
@@ -148,6 +156,17 @@ uint8_t _getchUART2()
 	return d;
 }
  
+void *memcpy(void *dst, const void *src, unsigned int n)
+{
+	unsigned char *d = (unsigned char *)dst;
+	const unsigned char *s = (const unsigned char *)src;
+
+	while (n--) {
+		*d++ = *s++;
+	}
+	return dst;
+}
+
 
 #define putchar(d) _putch(d)
 #include "printf.c"
@@ -245,7 +264,7 @@ void __attribute__((interrupt ("machine"))) irq0_handler()
 //Timer
 void __attribute__((interrupt ("machine"))) irq1_handler()
 {
-	IRQEN=0b00000000;
+	IRQEN &= ~IRQ_TIMER;
 	switch(state){
 		case 0:
 			readCO();
@@ -327,9 +346,9 @@ return SPI1DAT;
 
 // --------------------------------------------------------
 
-#define BAUD 115200
-// #define BAUD1 9600 // No sé si hay que definir otros BAUDs para las otras UARTs
-// #define BAUD2 9600
+#define BAUD 115200u
+#define BAUD1 9600u
+#define BAUD2 115200u
 #define NULL ((void *)0)
 
 // Get word from UART0
@@ -396,9 +415,11 @@ void main()
 	
 	SPICTRL=(8<<8)|8; 					// SPI control register 0 
 	SPI1CTRL=(8<<8)|8; 					// SPI control register 1 
+	SPISS = 0b11;
+	SPI1SS = 1;
 	UARTBAUD=(CCLK+BAUD/2)/BAUD -1;	    // UART0 baud rate
-	UART1BAUD = (CCLK+BAUD/2)/BAUD -1;	// UART1 baud rate(modificar si se añaden otros baud rate)
-	UART2BAUD = (CCLK+BAUD/2)/BAUD -1;	// UART2 baud rate(modificar si se añaden otros baud raes)
+	UART1BAUD = (CCLK+BAUD1/2)/BAUD1 -1;	// UART1 baud rate (GPS)
+	UART2BAUD = (CCLK+BAUD2/2)/BAUD2 -1;	// UART2 baud rate
 
 	//_delay_ms(100);
 	
@@ -416,7 +437,10 @@ void main()
 	IRQVECT7=(uint32_t)irq7_handler;
 
 	// Habilitar IRQ de RX en UART0 (bit 2).
-	IRQEN = (1 << 2);
+	IRQEN = IRQ_UART0_RX;
+
+	// Activar TIMER para las funciones que lo usan como contador.
+	MAX_COUNT = 0xFFFFFFFFu;
 
 	asm volatile ("ecall");
 	asm volatile ("ebreak");
@@ -446,7 +470,7 @@ void main()
 				_printf("Modulo LoRa iniciado\n");
 				SX1262_configSetFrequency(868000000);
 				SX1262_configSetBandwidth(4);      		// 125KHz
-				SX1262_configSetSpreadingFactor(12); 	//SF12
+				SX1262_configSetSpreadingFactor(7); 	//SF7
 				SX1262_transmit((uint8_t *)"Grupo 1", (int)(sizeof("Grupo 1") - 1));
 			}
 				else
@@ -462,7 +486,7 @@ void main()
 					_printf("Modulo LoRa iniciado\n");
 					SX1262_configSetFrequency(868000000);
 					SX1262_configSetBandwidth(4);      	  //125 kHz
-					SX1262_configSetSpreadingFactor(12);  //SF12
+					SX1262_configSetSpreadingFactor(7);  //SF7
 					n = SX1262_lora_receive_async(lora_rx_buffer, sizeof(lora_rx_buffer));
 					if (n > 0)
 					{
@@ -505,7 +529,7 @@ void main()
 				_printf("%02d.%d%c", temp_comp / 100, temp_comp % 100, 167);
 	
 				_printf("\n La presion es: ");
-				_printf("%d Pascuales", press_comp / 100);
+				_printf("%d Pascales", press_comp / 100);
 	
 				_printf("\n La humedad es: ");
 				_printf("%02d.%03d%c", hum_comp / 1000, hum_comp % 1000, 37);

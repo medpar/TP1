@@ -1,50 +1,62 @@
+#include <stdint.h>
 
-void readGas(){
+#include "moduloMCP3004.h"
+#include "moduloMQ9.h"
 
-	state=0;	//Reset
-	ENABLE_5V;	//habilitamos 5V
-	IRQEN = 0b00000100;	//habilitamos la interrupción del timer
-	TIMER = 1 * 1000000; //60s 
-	
+extern int _printf(const char *format, ...);
+
+#define MQ9_ADC_BITS 1024
+#define MQ9_ADC_SCALE 330
+#define MQ9_CO_DIV 7
+#define MQ9_CH4_DIV 1
+
+static int mq9_scale_adc(int raw)
+{
+	return (raw * MQ9_ADC_SCALE) / MQ9_ADC_BITS;
 }
 
-void readCO(){
-	
-	int read_CO = 0;
-	int gas_CO=1;
-		
-	gas_CO = readMCP3004(MCP3004_CH0); //leemos de ADC CH0	- AQUI ESTA EL ERROR
-	//_printf("gas_CO: %d\n", gas_CO);	//LECTURA ERRONEA no permite leer
-	DISABLE_5V_1V4;	//deshabilitamos 5V
-	ENABLE_1V4; //habilitamos 1V4
-	
-	IRQEN = 0b00000100;	//habilitamos la interrupción del timer
-	TIMER = 1 * 1000000; //90s 
-	
-	state = 1; //Actualizamos estado
-	
-	read_CO = (10*(330*gas_CO)) / (1024*7);
-	_printf("Medicion de C0 en curso, por favor espere 60 seg.\n"); 
+static int mq9_ppm_from_scaled(int scaled, int div)
+{
+	if (div == 0) return 0;
+	return (10 * scaled) / div;
+}
+
+void readGas(void)
+{
+	state = 0;
+	ENABLE_5V;
+	IRQEN |= IRQ_TIMER;
+	MAX_COUNT = 1 * 1000000;
+}
+
+void readCO(void)
+{
+	int gas_CO = MCP3004_Read(MCP3004_CH0);
+	int scaled = mq9_scale_adc(gas_CO);
+	int read_CO = mq9_ppm_from_scaled(scaled, MQ9_CO_DIV);
+
+	DISABLE_5V_1V4;
+	ENABLE_1V4;
+
+	IRQEN |= IRQ_TIMER;
+	MAX_COUNT = 1 * 1000000;
+
+	state = 1;
+
+	_printf("Medicion de CO en curso, por favor espere 60 seg.\n");
 	_printf("Lectura CO: %d ppm \n", read_CO);
-
 	_printf("Medicion de CH4 en curso, por favor espere 90 seg.\n");
-	
 }
 
-void readCH4(){
-	
-	int read_CH4 = 0;
-	int gas_CH4=1;
-	
-	gas_CH4 = readMCP3004(MCP3004_CH0); //leemos de ADC
-	//_printf("gas_CH4: %d ppm\n", gas_CH4);
-	
-	DISABLE_5V_1V4;	//deshabilitamos 5V
-	
-	state = 2; //Actualizamos estado
-	
-	read_CH4 = 10*(330*gas_CH4) / (1024);	
-	//_printf("Estado: %d\n", estado);
-	_printf("Lectura CH4: %d ppm \n", read_CH4); 
+void readCH4(void)
+{
+	int gas_CH4 = MCP3004_Read(MCP3004_CH0);
+	int scaled = mq9_scale_adc(gas_CH4);
+	int read_CH4 = mq9_ppm_from_scaled(scaled, MQ9_CH4_DIV);
 
+	DISABLE_5V_1V4;
+
+	state = 2;
+
+	_printf("Lectura CH4: %d ppm \n", read_CH4);
 }

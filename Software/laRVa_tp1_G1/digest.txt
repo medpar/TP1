@@ -1,0 +1,2983 @@
+Directory structure:
+└── filmware-main/
+    ├── GP2Y1010.c
+    ├── GP2Y1010.h
+    ├── LoRa.c
+    ├── LoRa.h
+    ├── lora_sx1262.c
+    ├── lora_sx1262.h
+    ├── main.c
+    ├── MCP3004.c
+    ├── MCP3004.h
+    ├── ModuloBME.c
+    ├── ModuloBME.h
+    ├── ModuloGPS.c
+    ├── ModuloGPS.h
+    ├── ModuloMQ9.c
+    ├── ModuloMQ9.h
+    ├── printf.c
+    ├── SPI.c
+    ├── SPI.h
+    └── Arduino-LoRa-Sx1262-main/
+        └── src/
+            └── LoraSx1262.h
+
+================================================
+FILE: GP2Y1010.c
+================================================
+#include "GP2Y1010.h"
+#include "MCP3004.h"
+
+extern int _printf(const char *format, ...);
+
+static uint32_t gp2y1010_us_to_ticks(uint32_t us)
+{
+	return (CCLK / 1000000u) * us;
+}
+
+int GP2Y1010_ReadRaw(uint8_t channel)
+{
+	uint32_t sample_ticks = gp2y1010_us_to_ticks(GP2Y1010_SAMPLE_US);
+	uint32_t total_ticks = gp2y1010_us_to_ticks(GP2Y1010_LED_ON_US);
+	uint32_t start = TIMER;
+	uint32_t t_sample;
+	uint32_t t_off;
+	int adc;
+
+	GPOUT |= M2_ON_OFF;
+	while ((uint32_t)(TIMER - start) < sample_ticks) {
+	}
+	t_sample = TIMER;
+	adc = MCP3004_Read(channel);
+	while ((uint32_t)(TIMER - start) < total_ticks) {
+	}
+	t_off = TIMER;
+
+	return adc;
+}
+
+
+
+================================================
+FILE: GP2Y1010.h
+================================================
+#pragma once
+
+#include <stdint.h>
+
+#define GP2Y1010_LED_ON_US 320u
+#define GP2Y1010_SAMPLE_US 280u
+
+int GP2Y1010_ReadRaw(uint8_t channel);
+
+
+
+================================================
+FILE: LoRa.c
+================================================
+typedef unsigned short int byte;
+//#include <cstdint>
+//#include "Arduino.h"
+
+#define false  0
+#define true  1
+
+
+uint32_t LoraSx1262_pllFrequency;
+uint8_t LoraSx1262_bandwidth;
+uint8_t LoraSx1262_codingRate;
+uint8_t LoraSx1262_spreadingFactor;
+uint8_t LoraSx1262_lowDataRateOptimize;
+uint32_t LoraSx1262_transmitTimeout;
+uint8_t spiBuff[32];
+unsigned int inReceiveMode;
+
+
+#define SX1262_NSS   ((volatile uint32_t*)0xE0000068)
+#define SX1262_DIO1  LORA_DIO1
+
+#define SPI1DAT	 (*(volatile uint32_t*)0xE0000060)
+#define SPI1CTRL (*(volatile uint32_t*)0xE0000064)
+#define SPI1STA	 (*(volatile uint32_t*)0xE0000064)
+#define SPI1SS	 (*(volatile uint32_t*)0xE0000068)
+
+
+
+/*
+// Mapa de registros del datasheet LoRa
+#define LORA_HOPP_ENABLE (0x0385)
+#define LORA_PACK_LENGTH (0x0386)
+#define LORA_HOPP_ENABLE (0x0387)
+#define LORA_PACK_LENGTH (0x0388)
+#define LORA_HOPP_ENABLE (0x0020)
+#define LORA_PACK_LENGTH (0x0020)
+#define LORA_HOPP_ENABLE (0x0020)
+#define LORA_PACK_LENGTH (0x0020)
+*/
+
+
+
+void _memcpy(unsigned char *dest, unsigned char * src, unsigned int n)
+{
+ int i;
+ for(i=0;i<n;i++) dest[i]=src[i]; 
+}
+
+
+unsigned long millis(){ return (TIMER)/(CCLK/1000);}   
+
+
+//Función que se encarga de transmitir
+unsigned char SPI_transfer(unsigned char *lista, int n){
+   int i;
+   	SPI1SS = 0b1110; //Habil1itamos el chip select
+   for(i=0;i<n;i++){
+    SPI1DAT = lista[i]; // Escribimos el dato en el registro SPIDAT (spi_data)
+	_printf("%02x ", lista[i]);
+	//_printf("%c\n", SPI1DAT);
+	
+    while(SPI1STA & 1); // Leemos en el registro SPISTA (spi_status) para comprobar que haya funcionado bien.
+    lista[i] = SPI1DAT;
+    //_printf("Leo (%02x)  \n", lista[i]);
+  }
+  SPI1SS = 0b1111;
+  _printf("\n");
+  for(i=0;i<n;i++) _printf("%02x ", lista[i]);
+  _printf("\n\n");
+  
+  
+  return SPI1DAT;
+}
+
+/*
+//Función que se encarga de transmitir
+unsigned char SPI_transfer(unsigned char dato){
+
+    SPIDAT = dato; // Escribimos el dato en el registro SPIDAT (spi_data)
+    while(SPISTA & 1); // Leemos en el registro SPISTA (spi_status) para comprobar que haya funcionado bien.
+    return SPIDAT;
+}
+*/
+
+//Función que emula el comportamiento de digitalWrite
+void digitalWrite(volatile uint32_t *REG, unsigned int data){
+    if(data){
+        *REG |= 1u; // Deshabilita SS0 (activo en bajo)
+    }else{
+	    while(GPIN & LORA_BUSY); // Espero a que LORA BUSY este en cero(libre)
+		*REG &= ~1u; // Habilita SS0 (activo en bajo)
+    }
+}
+// Poner un bit de un registro a 1
+// REG = REG | (1<<bit)
+// Poner un bit de un registro a 0
+// REG = REG & (~(1<<bit))
+// Leer un bit
+// ((REG  & (1<<bit))>>bit)
+
+
+//Función que emula el comportamiento de digitalRead
+unsigned int digitalRead(unsigned int mask){
+    return (GPIN & mask);
+}
+
+
+
+
+unsigned int LoraSx1262_begin(){ //Cambiamos miembro de clase por función (changed, he cambiado bool por int)
+
+    //(CHANGED)SPI_begin(); //inicializado en el system.v linea 290
+    /*Los pinModes no se ponen input o output, ya se conectarán los cables dode toque
+        pinMode(SX1262_NSS, OUTPUT);
+        pinMode(SX1262_RESET, OUTPUT);
+        pinMode(SX1262_DIO1, INPUT);
+    */
+	//_printf("Primer punto\n");
+    digitalWrite(SX1262_NSS, 1);
+	_delay_ms(10);
+	GPOUT |= LORA_RESET; // LORA_RESET = 1
+	_delay_ms(10);
+
+
+	  //LO FORZAMOS SOLO A TRANSMITIR
+	GPOUT |=  L_TX; // L_TX = 1
+	GPOUT &= ~L_RX; // L_RX = 0
+
+	//////////////////////////////
+	
+	//_printf("Segundo punto\n");
+    unsigned int success = LoraSx1262_sanityCheck();
+	//_printf("Tercer punto\n");
+	
+    if(!success){
+		//_printf("Ha cascado\n");
+        return 0;
+		
+    }
+	//_printf("No Ha cascado\n");
+    LoraSx1262_configureRadioEssentials();
+	//_printf("no no Ha cascado\n");
+    return 1;
+}
+
+
+
+unsigned int LoraSx1262_sanityCheck(){
+	//_printf("Entrando\n");
+    digitalWrite(SX1262_NSS, 0); //ERROR
+	_delay_ms(10);
+    spiBuff[0] = 0x1D;
+    spiBuff[1] = 0x07;
+    spiBuff[2] = 0x40;
+    spiBuff[3] = 0x00;
+	spiBuff[4] = 0x00;
+	
+    SPI_transfer(spiBuff, 5);
+  
+    digitalWrite(SX1262_NSS, 1);  //CS High = Disabled
+	
+	if(spiBuff[4] == 0x14){
+		_printf("SanityCheck comprobado\n");
+		return 1; // Valido 
+	}else{	
+		return 0; // Error
+	}
+
+}
+
+
+void LoraSx1262_configureRadioEssentials() {
+  _printf("Entrando en configureRadioEssentials\n");
+  //Tell DIO2 to control the RF switch so we don't have to do it manually
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x9D;  //Opcode for "SetDIO2AsRfSwitchCtrl"
+  spiBuff[1] = 0x01;  //Enable
+  SPI_transfer(spiBuff, 2);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100); //Give time for the radio to proces command
+
+  //Just a single SPI command to set the frequency, but it's broken out
+  //into its own function so we can call it on-the-fly when the config changes
+  LoraSx1262_configSetFrequency(868000000);  //Set default frequency to 868mhz
+
+  //Set modem to LoRa (described in datasheet section 13.4.2)
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x8A;          //Opcode for "SetPacketType"
+  spiBuff[1] = 0x01;          //Packet Type: 0x00=GFSK, 0x01=LoRa
+  SPI_transfer(spiBuff, 2);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Set Rx Timeout to reset on SyncWord or Header detection
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x9F;          //Opcode for "StopTimerOnPreamble"
+  spiBuff[1] = 0x00;          //Stop timer on:  0x00=SyncWord or header detection, 0x01=preamble detection  SPI.transfer(spiBuff,2); //DUDA, ES 0X00 O 0X01 POR EL PREAMBULO
+  SPI_transfer(spiBuff, 2); 
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Set modulation parameters is just one more SPI command, but since it
+  //is often called frequently when changing the radio config, it's broken up into its own function
+  LoraSx1262_configSetPreset(PRESET_LONGRANGE);  //Sets default modulation parameters
+  LoraSx1262_configSetBandwidth(4);             //125khz
+  LoraSx1262_configSetSpreadingFactor(7);       //SF7
+  LoraSx1262_configSetSyncWord(0x0014);         //Sync word 0x14
+
+  // Set PA Config
+  // See datasheet 13.1.4 for descriptions and optimal settings recommendations
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x95;          //Opcode for "SetPaConfig"
+  spiBuff[1] = 0x04;          //paDutyCycle. See datasheet, set in conjuntion with hpMax
+  spiBuff[2] = 0x07;          //hpMax.  Basically Tx power.  0x00-0x07 where 0x07 is max power (changed) (EY)
+  spiBuff[3] = 0x00;          //device select: 0x00 = SX1262, 0x01 = SX1261
+  spiBuff[4] = 0x01;          //paLut (reserved, always set to 1)
+  SPI_transfer(spiBuff, 5); 
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  // Set TX Params
+  // See datasheet 13.4.4 for details
+  digitalWrite(SX1262_NSS,0); //Enable radio chip-select
+  spiBuff[0] = 0x8E;          //Opcode for SetTxParams
+  spiBuff[1] = 22;            //Power.  Can be -17(0xEF) to +14(0x0E) in Low Pow mode.  -9(0xF7) to 22(0x16) in high power mode (CHANGED) (EY)
+  spiBuff[2] = 0x02;          //Ramp time. Lookup table.  See table 13-41. 0x02="40uS"
+  SPI_transfer(spiBuff, 3);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Set LoRa Symbol Number timeout
+  //How many symbols are needed for a good receive.
+  //Symbols are preamble symbols
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0xA0;          //Opcode for "SetLoRaSymbNumTimeout"
+  spiBuff[1] = 0x00;          //Number of symbols.  Ping-pong example from Semtech uses 5
+  SPI_transfer(spiBuff, 2);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+
+  //Enable interrupts
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x08;        //0x08 is the opcode for "SetDioIrqParams"
+  spiBuff[1] = 0x00;        //IRQMask MSB.  IRQMask is "what interrupts are enabled"
+  spiBuff[2] = 0x02;        //IRQMask LSB         See datasheet table 13-29 for details
+  spiBuff[3] = 0xFF;        //DIO1 mask MSB.  Of the interrupts detected, which should be triggered on DIO1 pin
+  spiBuff[4] = 0xFF;        //DIO1 Mask LSB
+  spiBuff[5] = 0x00;        //DIO2 Mask MSB
+  spiBuff[6] = 0x00;        //DIO2 Mask LSB
+  spiBuff[7] = 0x00;        //DIO3 Mask MSB
+  spiBuff[8] = 0x00;        //DIO3 Mask LSB
+  SPI_transfer(spiBuff, 9);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100); //EQUIVALENTE A delay(100);                  //Give time for radio to process the command
+  _printf("configureRadioEssentials comprobado\n");
+}
+
+
+void LoraSx1262_transmit(uint8_t *data, int dataLen) {
+  _printf("Entrando en transmit\n");
+  //Max lora packet size is 255 bytes
+  if (dataLen > 255) { dataLen = 255;}
+
+  /*Set packet parameters
+  # Tell LoRa what kind of packet we're sending (and how long)
+  # Parameters are:
+  # - Preamble Length MSB
+  # - Preamble Length LSB
+  # - Header Type (variable vs fixed len)
+  # - Payload Length
+  # - CRC on/off
+  # - IQ Inversion on/off
+  */
+  GPOUT |= (L_TX | L_RX);
+  //LO FORZAMOS SOLO A TRANSMITIR
+  GPOUT |=  L_TX; // L_TX = 1
+  GPOUT &= ~L_RX; // L_RX = 0
+	
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x8C;          //Opcode for "SetPacketParameters"
+  spiBuff[1] = 0x00;          //PacketParam1 = Preamble Len MSB
+  spiBuff[2] = 0x08;          //PacketParam2 = Preamble Len LSB
+  spiBuff[3] = 0x00;          //PacketParam3 = Header Type. 0x00 = Variable Len, 0x01 = Fixed Length
+  spiBuff[4] = dataLen;       //PacketParam4 = Payload Length (Max is 255 bytes)
+  spiBuff[5] = 0x00;          //PacketParam5 = CRC Type. 0x00 = Off, 0x01 = on
+  spiBuff[6] = 0x00;          //PacketParam6 = Invert IQ.  0x00 = Standard, 0x01 = Inverted
+  SPI_transfer(spiBuff, 7);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(100);  //Give time for radio to process the command
+  //Write the payload to the buffer
+  //  Reminder: PayloadLength is defined in setPacketParams
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x0E,          //Opcode for WriteBuffer command
+  spiBuff[1] = 0x00;          //Dummy byte before writing payload
+  SPI_transfer(spiBuff, 2);    //Send header info
+  //_printf("Segundo punto de control\n");
+  //SPI.transfer overwrites original buffer.  This could probably be confusing to the user
+  //If they tried writing the same buffer twice and got different results
+  //Eg "radio.transmit(buff,10); radio.transmit(buff,10);" would transmit two different packets
+  //We'll make a performance+memory compromise and write in 32 byte chunks to avoid changing the contents
+  //of the original data array
+  //Copy contents to SPI buff until it's full, and then write that
+  //TEST: I tested this method, which uses about 0.1ms (100 microseconds) more time, but it saves us about 10% of ram.
+  //I think this is a fair trade 
+  uint8_t size = sizeof(spiBuff);
+  for (uint16_t i = 0; i < dataLen; i += size) {
+    if (i + size > dataLen) { size = dataLen - i; }
+    _memcpy(spiBuff,&(data[i]),size);
+    _printf("Prueba 1 %s\n", spiBuff);
+    SPI_transfer(spiBuff, size); //Write the payload itself
+  }
+ 
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(1000);   //Give time for radio to process the command
+
+  //Transmit!
+  // An interrupt will be triggered if we surpass our timeout
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x83;          //Opcode for SetTx command
+  spiBuff[1] = 0xFF;          //Timeout (3-byte number)
+  spiBuff[2] = 0xFF;          //Timeout (3-byte number)
+  spiBuff[3] = 0xFF;          //Timeout (3-byte number)
+  SPI_transfer(spiBuff, 4);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(LoraSx1262_transmitTimeout); //Wait for tx to complete, with a timeout so we don't wait forever
+  //Remember that we are in Tx mode.  If we want to receive a packet, we need to switch into receiving mode
+  inReceiveMode = false;
+}
+
+
+unsigned int LoraSx1262_waitForRadioCommandCompletion(uint32_t timeout) {
+  uint32_t startTime = millis();
+  _printf("Tiempo 1: %d\n", startTime);
+  unsigned int dataTransmitted = false;
+
+  //Keep checking radio status until it has completed
+  while (!dataTransmitted) {
+    //Wait some time between spamming SPI status commands, asking if the chip is ready yet
+    //Some commands take a bit before the radio even changes into a busy state,
+    //so if we check too fast we might pre-maturely think we're done processing the command
+    //3ms delay gives inconsistent results.  4ms seems stable.  Using 5ms to be safe
+    _delay_ms(5);
+
+    //Ask the radio for a status update
+    digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+    spiBuff[0] = 0xC0;          //Opcode for "getStatus" command
+    spiBuff[1] = 0x00;          //Dummy byte, status will overwrite this byte
+    SPI_transfer(spiBuff, 2);
+    digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+
+    //Parse out the status (see datasheet for what each bit means)
+    uint8_t chipMode = (spiBuff[1] >> 4) & 0x7;     //Chip mode is bits [6:4] (3-bits)
+    uint8_t commandStatus = (spiBuff[1] >> 1) & 0x7;//Command status is bits [3:1] (3-bits)
+
+    //Status 0, 1, 2 mean we're still busy.  Anything else means we're done.
+    //Commands 3-6 = command timeout, command processing error, failure to execute command, and Tx Done (respoectively)
+    if (commandStatus != 0 && commandStatus != 1 && commandStatus != 2) {
+      dataTransmitted = true;
+    }
+
+    //If we're in standby mode, we don't need to wait at all
+    //0x03 = STBY_XOSC, 0x02= STBY_RC
+    if (chipMode == 0x03 || chipMode == 0x02) {
+      dataTransmitted = true;
+    }
+
+    //Avoid infinite loop by implementing a timeout
+    if (millis() - startTime >= timeout) {
+		_printf("Tiemo 2 %d\n", millis());
+      return false;
+    }
+  }
+  return true;
+}
+
+
+//Sets the radio into receive mode, allowing it to listen for incoming packets.
+//If radio is already in receive mode, this does nothing.
+//There's no such thing as "setModeTransmit" because it is set automatically when transmit() is called
+void LoraSx1262_setModeReceive() {
+  if (inReceiveMode) { return; }  //We're already in receive mode, this would do nothing
+  GPOUT |= (L_TX | L_RX);
+  //LO FORZAMOS SOLO A TRANSMITIR
+  GPOUT &= ~L_TX; // L_TX = 0
+  GPOUT |=  L_RX; // L_RX = 1
+  
+  //Set packet parameters
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x8C;          //Opcode for "SetPacketParameters"
+  spiBuff[1] = 0x00;          //PacketParam1 = Preamble Len MSB
+  spiBuff[2] = 0x08;          //PacketParam2 = Preamble Len LSB
+  spiBuff[3] = 0x00;          //PacketParam3 = Header Type. 0x00 = Variable Len, 0x01 = Fixed Length
+  spiBuff[4] = 0xFF;          //PacketParam4 = Payload Length (Max is 255 bytes)
+  spiBuff[5] = 0x00;          //PacketParam5 = CRC Type. 0x00 = Off, 0x01 = on
+  spiBuff[6] = 0x00;          //PacketParam6 = Invert IQ.  0x00 = Standard, 0x01 = Inverted
+  SPI_transfer(spiBuff, 7);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(100);
+
+  // Tell the chip to wait for it to receive a packet.
+  // Based on our previous config, this should throw an interrupt when we get a packet
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x82;          //0x82 is the opcode for "SetRX"
+  spiBuff[1] = 0xFF;          //24-bit timeout, 0xFFFFFF means no timeout
+  spiBuff[2] = 0xFF;          // ^^
+  spiBuff[3] = 0xFF;          // ^^
+  SPI_transfer(spiBuff, 4);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  LoraSx1262_waitForRadioCommandCompletion(100);
+
+  //Remember that we're in receive mode so we don't need to run this code again unnecessarily
+  inReceiveMode = true;
+}
+
+
+int LoraSx1262_lora_receive_async(uint8_t* buff, int buffMaxLen) {
+  LoraSx1262_setModeReceive(); //Sets the mode to receive (if not already in receive mode)
+  _printf("\n\n\n");
+  _printf("INICIANDO RECEPCION");
+  //Radio pin DIO1 (interrupt) goes high when we have a packet ready.  If it's low, there's no packet yet
+  if ((GPIN & LORA_DIO1) == false) { return -1; } //Return -1, meanining no packet ready
+  _printf("INICIANDO RECEPCION");
+  //Tell the radio to clear the interrupt, and set the pin back inactive.
+  while ((GPIN & LORA_DIO1)) {
+    //Clear all interrupt flags.  This should result in the interrupt pin going low
+    digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+    spiBuff[0] = 0x02;          //Opcode for ClearIRQStatus command
+    spiBuff[1] = 0xFF;          //IRQ bits to clear (MSB) (0xFFFF means clear all interrupts)
+    spiBuff[2] = 0xFF;          //IRQ bits to clear (LSB)
+    SPI_transfer(spiBuff, 3);
+    digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  }
+  _printf("\n LIMPIAMOS INTERRUPCIONES");
+
+  // (Optional) Read the packet status info from the radio.
+  // This is things like radio strength, noise, etc.
+  // See datasheet 13.5.3 for more info
+  // This provides debug info about the packet we received
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x14;          //Opcode for get packet status
+  spiBuff[1] = 0xFF;          //Dummy byte. Returns status
+  spiBuff[2] = 0xFF;          //Dummy byte. Returns rssi
+  spiBuff[3] = 0xFF;          //Dummy byte. Returns snd
+  spiBuff[4] = 0xFF;          //Dummy byte. Returns signal RSSI
+  SPI_transfer(spiBuff, 5);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+
+  //Store these values as class variables so they can be accessed if needed
+  //Documentation for what these variables mean can be found in the .h file
+  unsigned int rssi       = -((int)spiBuff[2]) / 2;  //"Average over last packet received of RSSI. Actual signal power is –RssiPkt/2 (dBm)"
+  unsigned int snr        =  ((int8_t)spiBuff[3]) / 4;   //SNR is returned as a SIGNED byte, so we need to do some conversion first
+  unsigned int signalRssi = -((int)spiBuff[4]) / 2;
+    
+   _printf("RSSI: %d\n", rssi);
+   _printf("SNR: %d\n", snr);
+   _printf("Signal_RSSI: %d\n", signalRssi);
+   
+  //We're almost ready to read the packet from the radio
+  //But first we have to know how big the packet is, and where in the radio memory it is stored
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x13;          //Opcode for GetRxBufferStatus command
+  spiBuff[1] = 0xFF;          //Dummy.  Returns radio status
+  spiBuff[2] = 0xFF;          //Dummy.  Returns loraPacketLength
+  spiBuff[3] = 0xFF;          //Dummy.  Returns memory offset (address)
+  SPI_transfer(spiBuff, 4);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+
+  uint8_t payloadLen = spiBuff[2];    //How long the lora packet is
+  uint8_t startAddress = spiBuff[3];  //Where in 1262 memory is the packet stored
+
+  //Make sure we don't overflow the buffer if the packet is larger than our buffer
+  if (buffMaxLen < payloadLen) {payloadLen = buffMaxLen;}
+
+  //Read the radio buffer from the SX1262 into the user-supplied buffer
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x1E;          //Opcode for ReadBuffer command
+  spiBuff[1] = startAddress;  //SX1262 memory location to start reading from
+  spiBuff[2] = 0x00;          //Dummy byte
+  SPI_transfer(spiBuff, 3);    //Send commands to get read started
+  SPI_transfer(buff,payloadLen);  //Get the contents from the radio and store it into the user provided buffer
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _printf("Paquete: ");
+  _printf("%d\n",buff);
+
+  return payloadLen;  //Return how many bytes we actually read
+}
+
+
+int LoraSx1262_lora_receive_blocking(uint8_t *buff, int buffMaxLen, uint32_t timeout) {
+  LoraSx1262_setModeReceive(); //Sets the mode to receive (if not already in receive mode)
+ 
+  uint32_t startTime = millis();
+  uint32_t elapsed = startTime;
+
+  //Wait for radio interrupt pin to go high, indicating a packet was received, or if we hit our timeout
+  while (digitalRead(SX1262_DIO1) == false) {
+    //If user specified a timeout, check if we hit it
+    if (timeout > 0) {
+      elapsed = millis() - startTime;
+      if (elapsed >= timeout) {
+        return -1;    //Return error, saying that we hit our timeout
+      }
+    }
+  }
+  
+  //If our pin went high, then we got a packet!  Return it
+  return LoraSx1262_lora_receive_async(buff,buffMaxLen);
+}
+
+
+void LoraSx1262_updateRadioFrequency() {
+  //Set PLL frequency (this is a complicated math equation.  See datasheet entry for SetRfFrequency)
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x86;  //Opcode for set RF Frequencty
+  spiBuff[1] = (LoraSx1262_pllFrequency >> 24) & 0xFF;  //MSB of pll frequency
+  spiBuff[2] = (LoraSx1262_pllFrequency >> 16) & 0xFF;  //
+  spiBuff[3] = (LoraSx1262_pllFrequency >>  8) & 0xFF;  //
+  spiBuff[4] = (LoraSx1262_pllFrequency >>  0) & 0xFF;  //LSB of requency
+  SPI_transfer(spiBuff, 5);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100);                  //Give time for the radio to proces command
+}
+
+
+void LoraSx1262_updateModulationParameters() {
+  /*Set modulation parameters
+  # Modulation parameters are:
+  #  - SpreadingFactor
+  #  - Bandwidth
+  #  - CodingRate
+  #  - LowDataRateOptimize
+  # None of these actually matter that much.  You can set them to anything, and data will still show up
+  # on a radio frequency monitor.
+  # You just MUST call "setModulationParameters", otherwise the radio won't work at all*/
+  digitalWrite(SX1262_NSS, 0);      //Enable radio chip-select
+  spiBuff[0] = 0x8B;                //Opcode for "SetModulationParameters"
+  spiBuff[1] = LoraSx1262_spreadingFactor;     //ModParam1 = Spreading Factor.  Can be SF5-SF12, written in hex (0x05-0x0C)
+  spiBuff[2] = LoraSx1262_bandwidth;           //ModParam2 = Bandwidth.  See Datasheet 13.4.5.2 for details. 0x00=7.81khz (slowest)
+  spiBuff[3] = LoraSx1262_codingRate;          //ModParam3 = CodingRate.  Semtech recommends CR_4_5 (which is 0x01).  Options are 0x01-0x04, which correspond to coding rate 5-8 respectively
+  spiBuff[4] = LoraSx1262_lowDataRateOptimize; //LowDataRateOptimize.  0x00 = 0ff, 0x01 = On.  Required to be on for SF11 + SF12
+  SPI_transfer(spiBuff, 5);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100);                  //Give time for radio to process the command
+
+  //Come up with a reasonable timeout for transmissions
+  //SF12 is painfully slow, so we want a nice long timeout for that,
+  //but we really don't want someone using SF5 to have to wait MINUTES for a timeout
+  //I came up with these timeouts by measuring how long it actually took to transmit a packet
+  //at each spreading factor with a MAX 255-byte payload and 7khz Bandwitdh (the slowest one)
+  switch (LoraSx1262_spreadingFactor) {
+    case 12:
+      LoraSx1262_transmitTimeout = 252000; //Actual tx time 126 seconds
+      break;
+    case 11:
+      LoraSx1262_transmitTimeout = 160000; //Actual tx time 81 seconds
+      break;
+    case 10:
+      LoraSx1262_transmitTimeout = 60000; //Actual tx time 36 seconds
+      break;
+    case 9:
+      LoraSx1262_transmitTimeout = 40000; //Actual tx time 20 seconds
+      break;
+    case 8:
+      LoraSx1262_transmitTimeout = 20000; //Actual tx time 11 seconds
+      break;
+    case 7:
+      LoraSx1262_transmitTimeout = 12000; //Actual tx time 6.3 seconds
+      break;
+    case 6:
+      LoraSx1262_transmitTimeout = 7000; //Actual tx time 3.7s seconds
+      break;
+    default:  //SF5
+      LoraSx1262_transmitTimeout = 5000; //Actual tx time 2.2 seconds
+      break;
+  }
+}
+
+
+unsigned int LoraSx1262_configSetPreset(int preset) {
+  if (preset == PRESET_DEFAULT) {
+    LoraSx1262_bandwidth = 5;            //250khz
+    LoraSx1262_codingRate = 1;           //CR_4_5
+    LoraSx1262_spreadingFactor = 7;      //SF7
+    LoraSx1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    LoraSx1262_updateModulationParameters();
+    return true;
+  }
+
+  if (preset == PRESET_LONGRANGE) {
+    LoraSx1262_bandwidth = 4;            //125khz
+    LoraSx1262_codingRate = 1;           //CR_4_5
+    LoraSx1262_spreadingFactor = 7;      //SF7 (changed)
+    LoraSx1262_lowDataRateOptimize = 0;  //Optimize for low data rate (SF12 only)
+    LoraSx1262_updateModulationParameters();
+    return true;
+  }
+
+  if (preset == PRESET_FAST) {
+    LoraSx1262_bandwidth = 6;            //500khz
+    LoraSx1262_codingRate = 1;           //CR_4_5
+    LoraSx1262_spreadingFactor = 5;      //SF5
+    LoraSx1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    LoraSx1262_updateModulationParameters();
+    return true;
+  }
+
+  //Invalid preset specified
+  return false;
+}
+
+
+unsigned int LoraSx1262_configSetFrequency(long frequencyInHz) {
+  //Make sure the specified frequency is in the valid range.
+  if (frequencyInHz < 150000000 || frequencyInHz > 960000000) { return false;}
+
+  //Calculate the PLL frequency (See datasheet section 13.4.1 for calculation)
+  //PLL frequency controls the radio's clock multipler to achieve the desired frequency
+  LoraSx1262_pllFrequency = LoraSx1262_frequencyToPLL(frequencyInHz);
+  LoraSx1262_updateRadioFrequency();
+  _printf("La frecuencia ha sido fijada a: %d\n", frequencyInHz);
+  _printf("La frecuencia del PLL a: %d\n", LoraSx1262_pllFrequency);
+  return true;
+}
+
+
+unsigned int LoraSx1262_configSetBandwidth(int bandwidth) {
+  //Bandwidth setting must be 0-10 (excluding 7 for some reason)
+  if (bandwidth < 0 || bandwidth > 0x0A || bandwidth == 7) { return false; }
+  LoraSx1262_bandwidth = bandwidth;
+  LoraSx1262_updateModulationParameters();
+  return true;
+}
+
+
+unsigned int LoraSx1262_configSetCodingRate(int codingRate) {
+  //Coding rate must be 1-4 (inclusive)
+  if (codingRate < 1 || codingRate > 4) { return false; }
+  LoraSx1262_codingRate = codingRate;
+  LoraSx1262_updateModulationParameters();
+  return true;
+}
+
+
+unsigned int LoraSx1262_configSetSpreadingFactor(int spreadingFactor) {
+  if (spreadingFactor < 5 || spreadingFactor > 12) { return false; }
+
+  //The datasheet highly recommends enabling "LowDataRateOptimize" for SF11 and SF12
+  LoraSx1262_lowDataRateOptimize = (spreadingFactor >= 11) ? 1 : 0;  //Turn on for SF11+SF12, turn off for anything else
+  LoraSx1262_spreadingFactor = spreadingFactor;
+  LoraSx1262_updateModulationParameters();
+  return true;
+}
+
+
+unsigned int LoraSx1262_configSetSyncWord(uint16_t syncWord) {
+  digitalWrite(SX1262_NSS, 0); //Enable radio chip-select
+  spiBuff[0] = 0x9C;           //Opcode for "SetLoRaSyncWord"
+  spiBuff[1] = (syncWord >> 8) & 0xFF;
+  spiBuff[2] = syncWord & 0xFF;
+  SPI_transfer(spiBuff, 3);
+  digitalWrite(SX1262_NSS, 1); //Disable radio chip-select
+  _delay_ms(100);              //Give time for radio to process the command
+  return true;
+}
+
+
+uint32_t LoraSx1262_frequencyToPLL(long rfFreq) {
+  /* Datasheet Says:
+	 *		rfFreq = (pllFreq * xtalFreq) / 2^25
+	 * Rewrite to solve for pllFreq
+	 *		pllFreq = (2^25 * rfFreq)/xtalFreq
+	 *
+	 *	In our case, xtalFreq is 32mhz
+	 *	pllFreq = (2^25 * rfFreq) / 32000000
+	 */
+
+	//Basically, we need to do "return ((1 << 25) * rfFreq) / 32000000L"
+  //It's very important to perform this without losing precision or integer overflow.
+  //If arduino supported 64-bit varibales (which it doesn't), we could just do this:
+  //    uint64_t firstPart = (1 << 25) * (uint64_t)rfFreq;
+  //    return (uint32_t)(firstPart / 32000000L);
+  //
+  //Instead, we need to break this up mathimatically to avoid integer overflow
+  //First, we'll simplify the equation by dividing both parts by 2048 (2^11)
+  //    ((1 << 25) * rfFreq) / 32000000L      -->      (16384 * rfFreq) / 15625;
+  //
+  // Now, we'll divide first, then multiply (multiplying first would cause integer overflow)
+  // Because we're dividing, we need to keep track of the remainder to avoid losing precision
+  uint32_t q = rfFreq / 15625UL;  //Gives us the result (quotient), rounded down to the nearest integer
+  uint32_t r = rfFreq % 15625UL;  //Everything that isn't divisible, aka "the part that hasn't been divided yet"
+
+  //Multiply by 16384 to satisfy the equation above
+  q *= 16384UL;
+  r *= 16384UL; //Don't forget, this part still needs to be divided because it was too small to divide before
+  
+  return q + (r / 15625UL);  //Finally divide the the remainder part before adding it back in with the quotient
+}
+
+
+/*
+
+uint32_t my_millis(){
+  struct timespec t ;
+  clock_gettime ( CLOCK_MONOTONIC_RAW , & t ) ; // change CLOCK_MONOTONIC_RAW to CLOCK_MONOTONIC on non linux computers
+  return t.tv_sec * 1000 + ( t.tv_nsec + 500000 ) / 1000000 ;
+} */
+
+
+
+
+================================================
+FILE: LoRa.h
+================================================
+/*
+* License: Creative Commons 4.0 - Attribution, NonCommercial
+* https://creativecommons.org/licenses/by-nc/4.0/
+* Author: Mitch Davis (2023). github.com/thekakester
+* 
+* You are free to:
+*    Share — copy and redistribute the material in any medium or format
+*    Adapt — remix, transform, and build upon the material
+* Under the following terms:
+*    Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+*                  You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+*    NonCommercial — You may not use the material for commercial purposes.
+*
+* No warranties are given. The license may not give you all of the permissions necessary for your intended use.
+* For example, other rights such as publicity, privacy, or moral rights may limit how you use the material
+*/
+
+#ifndef __LORA1262__
+#define __LORA1262__
+
+#include <stdint.h>
+
+//#include <Arduino.h>
+//#include <SPI.h>
+
+/* Wiring requirements (for default shield pinout)
+# +-----------------+-------------+------------+
+# | Description     | Arduino Pin | Sx1262 Pin |
+# +-----------------+-------------+------------+
+# | Power (3v3)     | 3v3         | 3v3        |
+# | GND             | GND         | GND        |
+# | Radio Reset     | A0          | SX_NRESET  |
+# | Busy (optional) | D3          | BUSY       |
+# | Radio Interrupt | D5          | DIO1       |
+# | SPI SCK         | 13          | SCK        |
+# | SPI MOSI        | D11         | MOSI       |
+# | SPI MISO        | D12         | MISO       |
+# | SPI CS          | D7          | NSS        |
+# +-----------------+----------+------------+
+*/
+
+//Pin configurations (for Arduino UNO)
+/*
+#define SX1262_NSS   7
+#define SX1262_RESET A0
+*/
+
+
+//Presets. These help make radio config easier
+#define PRESET_DEFAULT    0
+#define PRESET_LONGRANGE  1
+#define PRESET_FAST       2
+
+
+typedef struct{
+  int rssi;
+  int snr;
+  unsigned int inReceiveMode;
+  int signalRssi;
+} LoraSx1262;
+
+
+unsigned char SPI_transfer(unsigned char *lista, int n);
+unsigned int LoraSx1262_begin();
+unsigned int LoraSx1262_sanityCheck();
+void LoraSx1262_transmit(uint8_t *data, int dataLen);
+int LoraSx1262_lora_receive_async(uint8_t* buff, int buffMaxLen);
+int LoraSx1262_lora_receive_blocking(uint8_t* buff, int buffMaxLen, uint32_t timeout);
+unsigned int LoraSx1262_configSetPreset(int preset);
+unsigned int LoraSx1262_configSetFrequency(long frequencyInHz);
+unsigned int LoraSx1262_configSetBandwidth(int bandwidth);
+unsigned int LoraSx1262_configSetCodingRate(int codingRate);
+unsigned int LoraSx1262_configSetSpreadingFactor(int spreadingFactor);
+unsigned int LoraSx1262_configSetSyncWord(uint16_t syncWord);
+uint32_t LoraSx1262_frequencyToPLL(long freqInHz);
+
+
+// Funciones privadas (declaración, implementación en tu código)
+static void LoraSx1262_setModeReceive();
+static void LoraSx1262_configureRadioEssentials();
+static unsigned int LoraSx1262_waitForRadioCommandCompletion(uint32_t timeout);
+static void LoraSx1262_updateRadioFrequency();
+static void LoraSx1262_updateModulationParameters();
+
+
+
+/*
+class LoraSx1262 {
+  public:
+    bool begin();
+    bool sanityCheck(); /*Returns true if we have an active SPI communication with the radio
+    void transmit(byte* data, int dataLen);
+    int lora_receive_async(byte* buff, int buffMaxLen); /*Checks to see if a lora packet was received yet, returns the packet if available
+    int lora_receive_blocking(byte* buff, int buffMaxLen, uint32_t timeout); /*Waits until a packet is received, with an optional timeout
+
+    //Radio configuration (optional)
+    bool configSetPreset(int preset);
+    bool configSetFrequency(long frequencyInHz);
+    bool configSetBandwidth(int bandwidth);
+    bool configSetCodingRate(int codingRate);
+    bool configSetSpreadingFactor(int spreadingFactor);
+    
+    //These variables show signal quality, and are updated automatically whenever a packet is received
+    int rssi = 0;
+    int snr = 0;
+    int signalRssi = 0;
+
+    uint32_t frequencyToPLL(long freqInHz);
+
+  private:
+    void setModeReceive();  //Puts the radio in receive mode, allowing it to receive packets
+    void configureRadioEssentials();
+    unsigned int waitForRadioCommandCompletion(uint32_t timeout);
+    void updateRadioFrequency();
+    void updateModulationParameters();
+    unsigned int inReceiveMode = 0;
+    uint8_t spiBuff[32];   //Buffer for sending SPI commands to radio
+
+    //Config variables (set to PRESET_DEFAULT on init)
+    uint32_t pllFrequency;
+    uint8_t bandwidth;
+    uint8_t codingRate;
+    uint8_t spreadingFactor;
+    uint8_t lowDataRateOptimize;
+    uint32_t transmitTimeout; //Worst-case transmit time depends on some factors
+};
+*/
+#endif
+
+
+
+================================================
+FILE: lora_sx1262.c
+================================================
+//--------------------------------------------------------------------------
+// Taller de Proyectos 1
+// Master de Ingeniería de Telecomunicaciones
+// E.T.S.I.Telecomunicaciones, Universidad de Valladolid
+// Jesús Arias Álvarez, Jesús M. Hernández Mangas
+// Curso 2022-2023
+// -------------------------------------------------------------------------
+//Presets. These help make radio config easier
+#define PRESET_DEFAULT    0
+#define PRESET_LONGRANGE  1
+#define PRESET_FAST       2
+
+#define true (1)
+#define false (0)
+
+//These variables show signal quality, and are updated automatically whenever a packet is received
+int      SX1262_rssi = 0;
+int      SX1262_snr = 0;
+int      SX1262_signalRssi = 0;
+
+uint8_t  SX1262_spiBuff[32];   //Buffer for sending SPI commands to radio
+uint32_t SX1262_pllFrequency;
+uint8_t  SX1262_bandwidth;
+uint8_t  SX1262_codingRate;
+uint8_t  SX1262_spreadingFactor;
+uint8_t  SX1262_lowDataRateOptimize;
+uint32_t SX1262_transmitTimeout;
+uint8_t  SX1262_inReceiveMode = false;
+
+void     SX1262_transmit(uint8_t* data, int dataLen);
+         
+void     SX1262_setModeReceive();
+int      SX1262_lora_receive_async(uint8_t* buff, int buffMaxLen);
+int      SX1262_lora_receive_blocking(uint8_t* buff, int buffMaxLen, uint32_t timeout);
+         
+uint8_t  SX1262_configSetPreset(int preset);
+uint8_t  SX1262_configSetFrequency(long frequencyInHz);
+uint8_t  SX1262_configSetBandwidth(int bandwidth);
+uint8_t  SX1262_configSetCodingRate(int codingRate);
+uint8_t  SX1262_configSetSpreadingFactor(int spreadingFactor);
+         
+void     SX1262_updateModulationParameters();
+uint8_t  SX1262_waitForRadioCommandCompletion(uint32_t timeout);
+void     SX1262_updateRadioFrequency();
+
+#define  SX1262_ReadRegister            (0x1D)
+#define  SX1262_SetDIO2AsRfSwitchCtrl   (0x9D)
+#define  SX1262_SetPacketType           (0x8A)
+#define  SX1262_StopTimerOnPreamble     (0x9F)
+#define  SX1262_SetPaConfig             (0x95)
+#define  SX1262_SetTxParams             (0x8E)
+#define  SX1262_SetLoRaSymbNumTimeout   (0xA0)
+#define  SX1262_SetDioIrqParams         (0x08)
+#define  SX1262_SetPacketParameters     (0x8C)
+#define  SX1262_WriteBuffer             (0x0E)
+#define  SX1262_ReadBuffer              (0x1E)
+#define  SX1262_SetRx                   (0x82)
+#define  SX1262_SetTx                   (0x83)
+#define  SX1262_SetModulationParameters (0x8B)
+#define  SX1262_GetRxBufferStatus       (0x13)
+#define  SX1262_GetPacketStatus         (0x14)
+#define  SX1262_ClearIRQStatus          (0x02)
+#define  SX1262_GetStatus               (0xC0)
+
+//int kk;
+//#define delay(a) kk=get_time(); _delay_ms(a); _printf("delay %d %d\n", a, ((get_time()-kk)/(CCLK/1000));
+#define delay(a) _delay_ms(a); 
+
+// GPOUT
+// #define LORA_RESET  (1<<10)
+// #define L_RX        (1<< 9)
+// #define L_TX        (1<< 8)
+
+// GPIN
+#define LORA_DIO1   (1<< 1)
+#define LORA_DIO0   (1<< 0)
+ 
+#define LORA_BUSY   (GPIN & LORA_DIO0)
+
+#define LORA_CS_1  SPI1SS = -1;	// LORA_CS alto
+#define LORA_CS_0  while(LORA_BUSY); SPI1SS = ~1;	// LORA_CS bajo
+
+#define LORA_RESET_1 GPOUT |=  LORA_RESET; // LORA_RESET alto
+#define LORA_RESET_0 GPOUT &= ~LORA_RESET; // LORA_RESET bajo
+#define LORA_RX_1    GPOUT |=  L_RX;       // LORA_RX  alto 
+#define LORA_RX_0    GPOUT &= ~L_RX;       // LORA_RX  bajo
+#define LORA_TX_1    GPOUT |=  L_TX;       // LORA_TX  alto
+#define LORA_TX_0    GPOUT &= ~L_TX;       // LORA_TX  bajo
+
+int iii;
+#define memcpy(a,b,c) for(iii=0;iii<c;iii++) (a)[iii]=(b)[iii];
+#define get_time() (TIMER) //(TIMER*1000)/CCLK  // debe  devolver ms
+#define get_DIO1() (GPIN & 2) // revisar que el pin esté configurado correctamente
+int debug = 0;
+
+void SPI_TRANSFER_BUF(uint8_t *a, uint32_t b)
+{ 
+ if(debug)
+ {
+  _printf("\nSent/Response\n"); 
+  for(int iii=0;iii<b;iii++){ _printf("%02x ", a[iii]); a[iii] = spi1xfer(a[iii]); }; 
+  _printf("\n"); 
+  for(int iii=0;iii<b;iii++){ _printf("%02x ", a[iii]); };
+  _printf("\n");
+ }
+ else
+ {
+  for(int iii=0;iii<b;iii++) a[iii] = spi1xfer(a[iii]); 
+ }
+}
+
+// -------------------------------------------------------------------------
+uint8_t SX1262_Init()
+{
+ uint8_t d;
+ //Set up SPI to talk to the LoRa Radio shield
+ //Set I/O pins based on the configuration
+ LORA_CS_1;
+ 
+ MAX_COUNT = 0xFFFFFFFF;
+ 
+ //Hardware reset the radio by toggling the reset pin 10 ms
+ LORA_RESET_0;
+ delay(10);
+ LORA_RESET_1;
+ delay(10);
+ // Check module present and SPI working [0x0740] => 0x14 (LoRA Sync word MSB)
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_ReadRegister;
+ SX1262_spiBuff[1] = 0x07;
+ SX1262_spiBuff[2] = 0x40;
+ SX1262_spiBuff[3] = 0x00;
+ SX1262_spiBuff[4] = 0x00;
+ SPI_TRANSFER_BUF(SX1262_spiBuff,5);
+ LORA_CS_1;
+ if(!(SX1262_spiBuff[4] == 0x14)) return false;
+ _printf("SX1262 present\n");
+ 
+ //Tell DIO2 to control the RF switch so we don't have to do it manually **************************
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_SetDIO2AsRfSwitchCtrl;
+ SX1262_spiBuff[1] = 0x01;  //Enable
+ SPI_TRANSFER_BUF(SX1262_spiBuff,2);
+ LORA_CS_1;
+ delay(100); //Give time for the radio to proces command
+ 
+ SX1262_configSetFrequency(868000000);  // Default frequency
+ //Set modem to LoRa (described in datasheet section 13.4.2)
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_SetPacketType;
+ SX1262_spiBuff[1] = 0x01;          //Packet Type: 0x00=GFSK, 0x01=LoRa
+ SPI_TRANSFER_BUF(SX1262_spiBuff,2);
+ LORA_CS_1;
+ delay(100);                  //Give time for radio to process the command
+ 
+ //Set Rx Timeout to reset on SyncWord or Header detection
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_StopTimerOnPreamble;
+ SX1262_spiBuff[1] = 0x00;    //Stop timer on:  0x00=SyncWord or header detection, 0x01=preamble detection  SPI_TRANSFER_BUF(SX1262_spiBuff,2);
+ SPI_TRANSFER_BUF(SX1262_spiBuff,2);
+ LORA_CS_1;
+ delay(100);                  //Give time for radio to process the command
+ 
+ //Set modulation parameters is just one more SPI command, but since it
+ //is often called frequently when changing the radio config, it's broken up into its own function
+ //SX1262_configSetPreset(PRESET_DEFAULT);  //Sets default modulation parameters
+ SX1262_configSetPreset(PRESET_LONGRANGE);
+ 
+ // Set PA Config
+ // See datasheet 13.1.4 for descriptions and optimal settings recommendations
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_SetPaConfig;
+ SX1262_spiBuff[1] = 0x04;    //paDutyCycle. See datasheet, set in conjuntion with hpMax
+ SX1262_spiBuff[2] = 0x07;    //hpMax.  Basically Tx power.  0x00-0x07 where 0x07 is max power
+ SX1262_spiBuff[3] = 0x00;    //device select: 0x00 = SX1262, 0x01 = SX1261
+ SX1262_spiBuff[4] = 0x01;    //paLut (reserved, always set to 1)
+ SPI_TRANSFER_BUF(SX1262_spiBuff,5);
+ LORA_CS_1;
+ delay(100);                  //Give time for radio to process the command
+ 
+ // Set TX Params
+ // See datasheet 13.4.4 for details
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_SetTxParams;
+ SX1262_spiBuff[1] = 22;      //Power.  Can be -17(0xEF) to +14(0x0E) in Low Pow mode.  
+                              //                -9(0xF7) to  22(0x16) in high power mode
+ SX1262_spiBuff[2] = 0x02;    //Ramp time. Lookup table.  See table 13-41. 0x02="40uS"
+ SPI_TRANSFER_BUF(SX1262_spiBuff,3);
+ LORA_CS_1;
+ delay(100);                  //Give time for radio to process the command
+ 
+ //Set LoRa Symbol Number timeout
+ //How many symbols are needed for a good receive.
+ //Symbols are preamble symbols
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_SetLoRaSymbNumTimeout;
+ SX1262_spiBuff[1] = 0x00;    //Number of symbols.  Ping-pong example from Semtech uses 5
+ SPI_TRANSFER_BUF(SX1262_spiBuff,2);
+ LORA_CS_1;
+ delay(100);                  //Give time for radio to process the command
+ 
+  //Enable interrupts
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_SetDioIrqParams;
+ SX1262_spiBuff[1] = 0x00;   //IRQMask MSB.  IRQMask is "what interrupts are enabled"
+ SX1262_spiBuff[2] = 0x02;   //IRQMask LSB    See datasheet table 13-29 for details
+ SX1262_spiBuff[3] = 0xFF;   //DIO1 mask MSB.  Of the interrupts detected, which should be triggered on DIO1 pin
+ SX1262_spiBuff[4] = 0xFF;   //DIO1 Mask LSB
+ SX1262_spiBuff[5] = 0x00;   //DIO2 Mask MSB
+ SX1262_spiBuff[6] = 0x00;   //DIO2 Mask LSB
+ SX1262_spiBuff[7] = 0x00;   //DIO3 Mask MSB
+ SX1262_spiBuff[8] = 0x00;   //DIO3 Mask LSB
+ SPI_TRANSFER_BUF(SX1262_spiBuff,9);
+ LORA_CS_1;
+ delay(100);                  //Give time for radio to process the command
+ 
+ return true;
+}
+// -------------------------------------------------------------------------
+void SX1262_transmit(uint8_t *data, int dataLen)
+{
+  // Max lora packet size is 255 uint8_ts
+  if (dataLen > 255) { dataLen = 255;}
+
+  // Set packet parameters
+  // # Tell LoRa what kind of packet we're sending (and how long)
+  // # Parameters are:
+  // # - Preamble Length MSB
+  // # - Preamble Length LSB
+  // # - Header Type (variable vs fixed len)
+  // # - Payload Length
+  // # - CRC on/off
+  // # - IQ Inversion on/off
+  LORA_RX_0;
+  LORA_TX_1; 
+  
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_SetPacketParameters;
+  SX1262_spiBuff[1] = 0x00;          //PacketParam1 = Preamble Len MSB
+  SX1262_spiBuff[2] = 0x08;          //PacketParam2 = Preamble Len LSB
+  SX1262_spiBuff[3] = 0x00;          //PacketParam3 = Header Type. 0x00 = Variable Len, 
+                                     //                            0x01 = Fixed Length
+  SX1262_spiBuff[4] = dataLen;       //PacketParam4 = Payload Length (Max is 255 uint8_ts)
+  SX1262_spiBuff[5] = 0x00;          //PacketParam5 = CRC Type. 0x00 = Off, 0x01 = on
+  SX1262_spiBuff[6] = 0x00;          //PacketParam6 = Invert IQ.  0x00 = Standard, 0x01 = Inverted
+  SPI_TRANSFER_BUF(SX1262_spiBuff,7);
+  LORA_CS_1;
+  
+  SX1262_waitForRadioCommandCompletion(100);  //Give time for radio to process the command
+
+  // Write the payload to the buffer
+  //  Reminder: PayloadLength is defined in setPacketParams
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_WriteBuffer;
+  SX1262_spiBuff[1] = 0x00;           //Dummy uint8_t before writing payload
+  SPI_TRANSFER_BUF(SX1262_spiBuff,2); //Send header info
+
+  // SPI_TRANSFER_BUF overwrites original buffer.  This could probably be confusing to the user
+  // If they tried writing the same buffer twice and got different results
+  uint8_t size = sizeof(SX1262_spiBuff);
+  for(uint16_t i = 0; i < dataLen; i += size) 
+  {
+    if (i + size > dataLen) { size = dataLen - i; }
+    memcpy(SX1262_spiBuff,&(data[i]),size);
+    SPI_TRANSFER_BUF(SX1262_spiBuff,size); //Write the payload itself
+  }
+  LORA_CS_1;
+
+  SX1262_waitForRadioCommandCompletion(1000);   //Give time for radio to process the command
+
+  //Transmit!
+  // An interrupt will be triggered if we surpass our timeout
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_SetTx;
+  SX1262_spiBuff[1] = 0xFF;          //Timeout (3-uint8_t number)
+  SX1262_spiBuff[2] = 0xFF;          //Timeout (3-uint8_t number)
+  SX1262_spiBuff[3] = 0xFF;          //Timeout (3-uint8_t number)
+  SPI_TRANSFER_BUF(SX1262_spiBuff,4);
+  LORA_CS_1;
+
+  SX1262_waitForRadioCommandCompletion(SX1262_transmitTimeout); //Wait for tx to complete, with a timeout so we don't wait forever
+
+  //Remember that we are in Tx mode.  If we want to receive a packet, we need to switch into receiving mode
+  SX1262_inReceiveMode = false;
+}
+// -------------------------------------------------------------------------
+// This command will wait until the radio reports that it is no longer busy.
+// This is useful when waiting for commands to finish that take a while such as transmitting packets.
+// Specify a timeout (in milliseconds) to avoid an infinite loop if something happens to the radio
+// Returns TRUE on success, FALSE if timeout hit
+// -------------------------------------------------------------------------
+uint8_t SX1262_waitForRadioCommandCompletion(uint32_t timeout)
+{
+ uint32_t startTime = get_time();
+ uint8_t dataTransmitted = false;
+
+ //Keep checking radio status until it has completed
+ while (!dataTransmitted)
+ {
+  //Wait some time between spamming SPI status commands, asking if the chip is ready yet
+  //Some commands take a bit before the radio even changes into a busy state,
+  //so if we check too fast we might pre-maturely think we're done processing the command
+  //3ms delay gives inconsistent results.  4ms seems stable.  Using 5ms to be safe
+  delay(5);
+
+  //Ask the radio for a status update
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_GetStatus;  //Opcode for "getStatus" command
+  SX1262_spiBuff[1] = 0x00;              //Dummy uint8_t, status will overwrite this uint8_t
+  SPI_TRANSFER_BUF(SX1262_spiBuff,2);
+  LORA_CS_1;
+
+  //Parse out the status (see datasheet for what each bit means)
+  uint8_t chipMode      = (SX1262_spiBuff[1] >> 4) & 0x7;     //Chip mode is bits [6:4] (3-bits)
+  uint8_t commandStatus = (SX1262_spiBuff[1] >> 1) & 0x7;//Command status is bits [3:1] (3-bits)
+
+  if(debug) _printf("chip mode = %d, status = %d\n", chipMode, commandStatus);
+  //Status 0, 1, 2 mean we're still busy.  Anything else means we're done.
+  //Commands 3-6 = command timeout, command processing error, failure to execute command, and Tx Done (respoectively)
+  if (commandStatus != 0 && commandStatus != 1 && commandStatus != 2) { dataTransmitted = true; }
+
+  //If we're in standby mode, we don't need to wait at all
+  //0x03 = STBY_XOSC, 0x02= STBY_RC
+  if (chipMode == 0x03 || chipMode == 0x02) { dataTransmitted = true; }
+  
+  //Avoid infinite loop by implementing a timeout
+  if (((get_time() - startTime)/(CCLK/1000)) >= timeout) 
+  {
+  // _printf("Timeout %6d \n",timeout); 
+   return false; 
+  }
+ }
+ 
+ return true;
+}
+// -------------------------------------------------------------------------
+//Sets the radio into receive mode, allowing it to listen for incoming packets.
+//If radio is already in receive mode, this does nothing.
+//There's no such thing as "setModeTransmit" because it is set automatically when transmit() is called
+// -------------------------------------------------------------------------
+void SX1262_setModeReceive()
+{
+  LORA_RX_1;
+  LORA_TX_0; 
+
+  if (SX1262_inReceiveMode) { return; }  //We're already in receive mode, this would do nothing
+ //_printf("Set receivemode\n");
+  //Set packet parameters
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_SetPacketParameters;
+  SX1262_spiBuff[1] = 0x00;          //PacketParam1 = Preamble Len MSB
+  SX1262_spiBuff[2] = 0x08;          //PacketParam2 = Preamble Len LSB 
+  SX1262_spiBuff[3] = 0x00;          //PacketParam3 = Header Type. 0x00 = Variable Len, 0x01 = Fixed Length
+  SX1262_spiBuff[4] = 0xFF;          //PacketParam4 = Payload Length (Max is 255 uint8_ts)
+  SX1262_spiBuff[5] = 0x00;          //PacketParam5 = CRC Type. 0x00 = Off, 0x01 = on
+  SX1262_spiBuff[6] = 0x00;          //PacketParam6 = Invert IQ.  0x00 = Standard, 0x01 = Inverted
+  SPI_TRANSFER_BUF(SX1262_spiBuff,7);
+  LORA_CS_1;
+  SX1262_waitForRadioCommandCompletion(100);
+  
+  // Tell the chip to wait for it to receive a packet.
+  // Based on our previous config, this should throw an interrupt when we get a packet
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_SetRx;
+  SX1262_spiBuff[1] = 0xFF;          //24-bit timeout, 0xFFFFFF means no timeout
+  SX1262_spiBuff[2] = 0xFF;          // ^^
+  SX1262_spiBuff[3] = 0xFF;          // ^^
+  SPI_TRANSFER_BUF(SX1262_spiBuff,4);
+  LORA_CS_1;
+  SX1262_waitForRadioCommandCompletion(100);
+  
+  //Remember that we're in receive mode so we don't need to run this code again unnecessarily
+  SX1262_inReceiveMode = true;
+}
+
+/*Receive a packet if available
+If available, this will return the size of the packet and store the packet contents into the user-provided buffer.
+A max length of the buffer can be provided to avoid buffer overflow.  If buffer is not large enough for entire payload, overflow is thrown out.
+Recommended to pass in a buffer that is 255 uint8_ts long to make sure you can received any lora packet that comes in.
+
+Returns -1 when no packet is available.
+Returns 0 when an empty packet is received (packet with no payload)
+Returns payload size (1-255) when a packet with a non-zero payload is received. If packet received is larger than the buffer provided, this will return buffMaxLen
+*/
+// -------------------------------------------------------------------------
+int SX1262_lora_receive_async(uint8_t* buff, int buffMaxLen)
+{
+ SX1262_setModeReceive(); //Sets the mode to receive (if not already in receive mode)
+
+ //Radio pin DIO1 (interrupt) goes high when we have a packet ready.  If it's low, there's no packet yet
+ if (get_DIO1() == false) { return -1; } //Return -1, meanining no packet ready
+ //_printf("DIO1 asserted\n");
+ //Tell the radio to clear the interrupt, and set the pin back inactive.
+ while (get_DIO1())
+ {
+  //Clear all interrupt flags.  This should result in the interrupt pin going low
+  LORA_CS_0;
+  SX1262_spiBuff[0] = SX1262_ClearIRQStatus ;
+  SX1262_spiBuff[1] = 0xFF;          //IRQ bits to clear (MSB) (0xFFFF means clear all interrupts)
+  SX1262_spiBuff[2] = 0xFF;          //IRQ bits to clear (LSB)
+  SPI_TRANSFER_BUF(SX1262_spiBuff,3);
+  LORA_CS_1;
+ }
+
+ // (Optional) Read the packet status info from the radio.
+ // This is things like radio strength, noise, etc.
+ // See datasheet 13.5.3 for more info
+ // This provides debug info about the packet we received
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_GetPacketStatus;
+ SX1262_spiBuff[1] = 0xFF;          //Dummy uint8_t. Returns status
+ SX1262_spiBuff[2] = 0xFF;          //Dummy uint8_t. Returns rssi
+ SX1262_spiBuff[3] = 0xFF;          //Dummy uint8_t. Returns snr
+ SX1262_spiBuff[4] = 0xFF;          //Dummy uint8_t. Returns signal RSSI
+ SPI_TRANSFER_BUF(SX1262_spiBuff,5);
+ LORA_CS_1;
+
+ //Store these values as class variables so they can be accessed if needed
+ //Documentation for what these variables mean can be found in the .h file
+ SX1262_rssi       = -((int   )SX1262_spiBuff[2]) / 2; //"Average over last packet received of RSSI. Actual signal power is –RssiPkt/2 (dBm)"
+ SX1262_snr        =  ((int8_t)SX1262_spiBuff[3]) / 4; //SNR is returned as a SIGNED uint8_t, so we need to do some conversion first
+ SX1262_signalRssi = -((int   )SX1262_spiBuff[4]) / 2;
+
+ _printf("rssi %4d, snr %4d :", SX1262_rssi, SX1262_snr);
+ //We're almost ready to read the packet from the radio
+ //But first we have to know how big the packet is, and where in the radio memory it is stored
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_GetRxBufferStatus;
+ SX1262_spiBuff[1] = 0xFF;          //Dummy.  Returns radio status
+ SX1262_spiBuff[2] = 0xFF;          //Dummy.  Returns loraPacketLength
+ SX1262_spiBuff[3] = 0xFF;          //Dummy.  Returns memory offset (address)
+ SPI_TRANSFER_BUF(SX1262_spiBuff,4);
+ LORA_CS_1;
+
+ uint8_t payloadLen   = SX1262_spiBuff[2]; //How long the lora packet is
+ uint8_t startAddress = SX1262_spiBuff[3]; //Where in 1262 memory is the packet stored
+ 
+ //Make sure we don't overflow the buffer if the packet is larger than our buffer
+ if (buffMaxLen < payloadLen) {payloadLen = buffMaxLen;}
+
+ //Read the radio buffer from the SX1262 into the user-supplied buffer
+ LORA_CS_0;
+ SX1262_spiBuff[0] = SX1262_ReadBuffer;
+ SX1262_spiBuff[1] = startAddress;  //SX1262 memory location to start reading from
+ SX1262_spiBuff[2] = 0x00;          //Dummy uint8_t
+ SPI_TRANSFER_BUF(SX1262_spiBuff,3);    //Send commands to get read started
+ SPI_TRANSFER_BUF(buff,payloadLen);  //Get the contents from the radio and store it into the user provided buffer
+ LORA_CS_1;
+
+ return payloadLen;  //Return how many uint8_ts we actually read
+}
+
+/*Waits for a packet to come in.  This code will block until something is received, or the timeout is hit.
+
+Set timeout=0 for no timeout, or set to a positive integer to specify a timeout in milliseconds
+This will store the contents of the payload into the user-provided buffer.  Recommended to use a buffer with 255 uint8_ts to always receive full packet.
+If a smaller buffer is used, maxBuffLen can be set to avoid buffer overflow. Any packets larger than this will have remaining uint8_ts thrown out.
+
+Returns -1 when no packet is available and timeout was hit.
+Returns 0 when an empty packet is received (packet with no payload)
+Returns payload size (1-255) when a packet with a non-zero payload is received. If packet received is larger than the buffer provided, this will return buffMaxLen
+*/
+// -------------------------------------------------------------------------
+int SX1262_lora_receive_blocking(uint8_t *buff, int buffMaxLen, uint32_t timeout)
+{
+ SX1262_setModeReceive(); //Sets the mode to receive (if not already in receive mode)
+
+ uint32_t startTime = get_time();
+ uint32_t elapsed = startTime;
+
+ //Wait for radio interrupt pin to go high, indicating a packet was received, or if we hit our timeout
+ while (get_DIO1() == false)
+ {
+  //If user specified a timeout, check if we hit it
+  if (timeout > 0)
+  {
+   elapsed = (get_time() - startTime)/(CCLK/1000);
+   if (elapsed >= timeout) { return -1; }
+  }
+ }
+ //If our pin went high, then we got a packet!  Return it
+ return SX1262_lora_receive_async(buff,buffMaxLen);
+}
+
+//Set the radio modulation parameters.
+//This is things like bandwitdh, spreading factor, coding rate, etc.
+//This is broken into its own function because this command might get called frequently
+// -------------------------------------------------------------------------
+void SX1262_updateModulationParameters()
+{
+  /*Set modulation parameters
+  # Modulation parameters are:
+  #  - SpreadingFactor
+  #  - Bandwidth
+  #  - CodingRate
+  #  - LowDataRateOptimize
+  # None of these actually matter that much.  You can set them to anything, and data will still show up
+  # on a radio frequency monitor.
+  # You just MUST call "setModulationParameters", otherwise the radio won't work at all*/
+  LORA_CS_0;      
+  SX1262_spiBuff[0] = SX1262_SetModulationParameters;
+  SX1262_spiBuff[1] = SX1262_spreadingFactor;     //ModParam1 = Spreading Factor.  Can be SF5-SF12, written in hex (0x05-0x0C)
+  SX1262_spiBuff[2] = SX1262_bandwidth;           //ModParam2 = Bandwidth.  See Datasheet 13.4.5.2 for details. 0x00=7.81khz (slowest)
+  SX1262_spiBuff[3] = SX1262_codingRate;          //ModParam3 = CodingRate.  Semtech recommends CR_4_5 (which is 0x01).  Options are 0x01-0x04, which correspond to coding rate 5-8 respectively
+  SX1262_spiBuff[4] = SX1262_lowDataRateOptimize; //LowDataRateOptimize.  0x00 = 0ff, 0x01 = On.  Required to be on for SF11 + SF12
+  SPI_TRANSFER_BUF(SX1262_spiBuff,5);
+  LORA_CS_1;
+  delay(100);                  //Give time for radio to process the command
+
+  //Come up with a reasonable timeout for transmissions
+  //SF12 is painfully slow, so we want a nice long timeout for that,
+  //but we really don't want someone using SF5 to have to wait MINUTES for a timeout
+  //I came up with these timeouts by measuring how long it actually took to transmit a packet
+  //at each spreading factor with a MAX 255-uint8_t payload and 7khz Bandwitdh (the slowest one)
+  switch (SX1262_spreadingFactor) {
+    case 12:
+      SX1262_transmitTimeout = 252000; //Actual tx time 126 seconds
+      break;
+    case 11:
+      SX1262_transmitTimeout = 160000; //Actual tx time 81 seconds
+      break;
+    case 10:
+      SX1262_transmitTimeout = 60000; //Actual tx time 36 seconds
+      break;
+    case 9:
+      SX1262_transmitTimeout = 40000; //Actual tx time 20 seconds
+      break;
+    case 8:
+      SX1262_transmitTimeout = 20000; //Actual tx time 11 seconds
+      break;
+    case 7:
+      SX1262_transmitTimeout = 12000; //Actual tx time 6.3 seconds
+      break;
+    case 6:
+      SX1262_transmitTimeout = 7000; //Actual tx time 3.7s seconds
+      break;
+    default:  //SF5
+      SX1262_transmitTimeout = 5000; //Actual tx time 2.2 seconds
+      break;
+  }
+}
+
+//--------------------------
+// ADVANCED FUNCTIONS
+//--------------------------
+//The functions below are intended for advanced users who are more familiar with LoRa Radios at a lower level
+//(Optional) Use one of the pre-made radio configurations
+// This is ideal for making simple changes to the radio config
+// without needing to understand how the underlying settings work
+//
+// Argument: pass in one of the following
+//     - PRESET_DEFAULT:   Default radio config.
+//                         Medium range, medium speed
+//     - PRESET_FAST:      Faster speeds, but less reliable at long ranges.
+//                         Use when you need fast data transfer and have radios close together
+//     - PRESET_LONGRANGE: Most reliable option, but slow. Suitable when you prioritize
+//                         reliability over speed, or when transmitting over long distances
+//
+// -------------------------------------------------------------------------
+uint8_t SX1262_configSetPreset(int preset)
+{
+  if (preset == PRESET_DEFAULT) {
+      /*
+    SX1262_bandwidth = 5;            //250khz
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 7;      //SF7
+    SX1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    */
+    SX1262_bandwidth = 4;            //125khz Match LilyGo LoRa
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 7;      //SF7
+    SX1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    SX1262_updateModulationParameters();
+    return true;
+  }
+
+  if (preset == PRESET_LONGRANGE) {
+    SX1262_bandwidth = 4;            //125khz
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 12;     //SF12
+    SX1262_lowDataRateOptimize = 1;  //Optimize for low data rate (SF12 only)
+    SX1262_updateModulationParameters();
+    return true;
+  }
+
+  if (preset == PRESET_FAST) {
+    SX1262_bandwidth = 6;            //500khz
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 5;      //SF5
+    SX1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    SX1262_updateModulationParameters();
+    return true;
+  }
+
+  //Invalid preset specified
+  return false;
+}
+// Set the operating frequency of the radio.
+// The 1262 radio supports 150-960Mhz.
+// -------------------------------------------------------------------------
+uint8_t SX1262_configSetFrequency(long frequencyInHz)
+{
+ if (frequencyInHz < 150000000 || frequencyInHz > 960000000) { return false;}
+ // PLL frequency (See datasheet section 13.4.1 for calculation)
+ SX1262_pllFrequency = 910163968UL; // para 868 MHz //SX1262_frequencyToPLL(frequencyInHz);
+
+ //Set PLL frequency (this is a complicated math equation.  See datasheet entry for SetRfFrequency)
+ LORA_CS_0;
+ SX1262_spiBuff[0] = 0x86;  //Opcode for set RF Frequencty
+ SX1262_spiBuff[1] = (SX1262_pllFrequency >> 24) & 0xFF;  //MSB of pll frequency
+ SX1262_spiBuff[2] = (SX1262_pllFrequency >> 16) & 0xFF;  //
+ SX1262_spiBuff[3] = (SX1262_pllFrequency >>  8) & 0xFF;  //
+ SX1262_spiBuff[4] = (SX1262_pllFrequency >>  0) & 0xFF;  //LSB of requency
+ SPI_TRANSFER_BUF(SX1262_spiBuff,5);
+ LORA_CS_1;
+ delay(100);
+
+ return true;
+}
+
+// Set the bandwith (basically, this is how big the frequency span is that we occupy)
+// Bigger bandwidth allows us to transmit large amounts of data faster, but it occupies a larger span of frequencies.
+// Smaller bandwith takes longer to transmit large amounts of data, but its less likely to collide with other frequencies.
+// /Available bandwidth settings, pulled from datasheet 13.4.5.2
+//  SETTING.   | Bandwidth
+// ------------+-----------
+//    0x00     |    7.81khz
+//    0x08     |   10.42khz
+//    0x01     |   15.63khz
+//    0x09     |   20.83khz
+//    0x02     |   31.25khz
+//    0x0A     |   41.67khz
+//    0x03     |   62.50khz
+//    0x04     |  125.00khz
+//    0x05     |  250.00khz (default)
+//    0x06     |  500.00khz
+// /Returns TRUE on success, FALSE on failure (invalid bandwidth)
+//
+// -------------------------------------------------------------------------
+uint8_t SX1262_configSetBandwidth(int bandwidth)
+{
+  //Bandwidth setting must be 0-10 (excluding 7 for some reason)
+  if (bandwidth < 0 || bandwidth > 0x0A || bandwidth == 7) { return false; }
+  SX1262_bandwidth = bandwidth;
+  SX1262_updateModulationParameters();
+  return true;
+}
+
+// I honestly don't really know what coding rate means.  It's something technical to have to do with radios
+// Set it here if you want.  See datasheet 13.4.5.2 for details
+//  SETTING. | Coding Rate
+// ----------+--------------------
+//    0x01   |   CR_4_5 (default)
+//    0x02   |   CR_4_6
+//    0x03   |   CR_4_7
+//    0x04   |   CR_4_8
+// Returns TRUE on success, FALSE on failure (invalid coding rate)
+//
+// -------------------------------------------------------------------------
+uint8_t SX1262_configSetCodingRate(int codingRate)
+{
+  //Coding rate must be 1-4 (inclusive)
+  if (codingRate < 1 || codingRate > 4) { return false; }
+  SX1262_codingRate = codingRate;
+  SX1262_updateModulationParameters();
+  return true;
+}
+
+// Change the spreading factor of a packet
+// The higher the spreading factor, the slower and more reliable the transmission will be.
+// Higher spreading factors are good for longer distances with slower transmit speeds.
+// Lower spreading factors are good when the radios are close, which allows faster transmission speeds.
+//
+// Setting | Spreading Factor
+// --------+---------------------------
+//    5    | SF5 (fastest, short range)
+//    6    | SF6
+//    7    | SF7 (default)
+//    8    | SF8
+//    9    | SF9
+//   10    | SF10
+//   11    | SF11
+//   12    | SF12 (Slowest, long range, most reliable)
+//
+// Returns TRUE on success, FALSE on failure (incorrect spreading factor)
+//
+// -------------------------------------------------------------------------
+uint8_t SX1262_configSetSpreadingFactor(int spreadingFactor)
+{
+  if (spreadingFactor < 5 || spreadingFactor > 12) { return false; }
+
+  //The datasheet highly recommends enabling "LowDataRateOptimize" for SF11 and SF12
+  SX1262_lowDataRateOptimize = (spreadingFactor >= 11) ? 1 : 0;  //Turn on for SF11+SF12, turn off for anything else
+  SX1262_spreadingFactor = spreadingFactor;
+  SX1262_updateModulationParameters();
+  return true;
+}
+
+// Convert a frequency in hz to the respective PLL setting.
+// The radio requires that we set the PLL, which controls the multipler on
+// the internal clock to achieve the desired frequency.
+// Valid frequencies are 150mhz to 960mhz
+// /NOTE: This assumes the radio is using a 32mhz clock, which is standard.
+// See datasheet section 13.4.1 for this calculation.
+//
+// -------------------------------------------------------------------------
+// Uses libc
+// 868 MHz
+// q = 868000000 / 15625 = 55552
+// r = 860000000 % 15625 = 0
+// q = q*16384 = 55552*16384 = 910163968
+// r = r*16384 =     0*16384 = 0
+// return q + (r / 15625UL) = 910163968
+/*
+uint32_t SX1262_frequencyToPLL(long rfFreq)
+{
+ // Datasheet Says:
+ //		rfFreq = (pllFreq * xtalFreq) / 2^25
+ // Rewrite to solve for pllFreq
+ //		pllFreq = (2^25 * rfFreq)/xtalFreq
+ //
+ //	In our case, xtalFreq is 32mhz
+ //	pllFreq = (2^25 * rfFreq) / 32000000
+ //
+ //Basically, we need to do "return ((1 << 25) * rfFreq) / 32000000L"
+ //It's very important to perform this without losing precision or integer overflow.
+ //If arduino supported 64-bit varibales (which it doesn't), we could just do this:
+ //    uint64_t firstPart = (1 << 25) * (uint64_t)rfFreq;
+ //    return (uint32_t)(firstPart / 32000000L);
+ //
+ //Instead, we need to break this up mathimatically to avoid integer overflow
+ //First, we'll simplify the equation by dividing both parts by 2048 (2^11)
+ //    ((1 << 25) * rfFreq) / 32000000L      -->      (16384 * rfFreq) / 15625;
+ //
+ // Now, we'll divide first, then multiply (multiplying first would cause integer overflow)
+ // Because we're dividing, we need to keep track of the remainder to avoid losing precision
+ uint32_t q = rfFreq / 15625UL;  //Gives us the result (quotient), rounded down to the nearest integer
+ uint32_t r = rfFreq % 15625UL;  //Everything that isn't divisible, aka "the part that hasn't been divided yet"
+  //Multiply by 16384 to satisfy the equation above
+ q *= 16384UL;
+ r *= 16384UL; //Don't forget, this part still needs to be divided because it was too small to divide before
+
+ return q + (r / 15625UL);  //Finally divide the the remainder part before adding it back in with the quotient
+}
+*/
+
+// -------------------------------------------------------------------------
+
+
+
+================================================
+FILE: lora_sx1262.h
+================================================
+#pragma once
+
+#include <stdint.h>
+
+#define PRESET_DEFAULT    0
+#define PRESET_LONGRANGE  1
+#define PRESET_FAST       2
+
+// SPI helper from SPI.c
+unsigned char spixfer1(unsigned char d);
+#ifndef spi1xfer
+#define spi1xfer spixfer1
+#endif
+
+extern int SX1262_rssi;
+extern int SX1262_snr;
+extern int SX1262_signalRssi;
+
+uint8_t SX1262_Init(void);
+void SX1262_transmit(uint8_t *data, int dataLen);
+int SX1262_lora_receive_async(uint8_t *buff, int buffMaxLen);
+int SX1262_lora_receive_blocking(uint8_t *buff, int buffMaxLen, uint32_t timeout);
+
+uint8_t SX1262_configSetPreset(int preset);
+uint8_t SX1262_configSetFrequency(long frequencyInHz);
+uint8_t SX1262_configSetBandwidth(int bandwidth);
+uint8_t SX1262_configSetCodingRate(int codingRate);
+uint8_t SX1262_configSetSpreadingFactor(int spreadingFactor);
+
+
+
+================================================
+FILE: main.c
+================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
+ 
+#include "ModuloBME.h"
+#include "ModuloGPS.h" 
+#include "SPI.h"
+#include "lora_sx1262.h"
+#include "MCP3004.h"
+#include "ModuloMQ9.h"
+#include "GP2Y1010.h"
+
+typedef unsigned char  u8;
+typedef unsigned short u16;
+typedef unsigned int   u32;
+  
+typedef signed char  s8; 
+typedef signed short s16;   
+typedef signed int   s32;
+ 
+volatile int estado; 
+volatile int lectura_CO;   
+volatile int lectura_CH4;  
+ 
+
+//-- Registros mapeados, declaramos los registros, el nombre debe coincidir
+#define UARTDAT  (*(volatile uint32_t*)0xE0000080)
+#define UARTSTA  (*(volatile uint32_t*)0xE0000084)
+#define UARTBAUD (*(volatile uint32_t*)0xE0000084)
+
+#define UART1DAT  (*(volatile uint32_t*)0xE0000090)
+#define UART1STA  (*(volatile uint32_t*)0xE0000094)
+#define UART1BAUD (*(volatile uint32_t*)0xE0000094)
+
+#define UART2DAT  (*(volatile uint32_t*)0xE00000A0)
+#define UART2STA  (*(volatile uint32_t*)0xE00000A4)
+#define UART2BAUD (*(volatile uint32_t*)0xE00000A4)
+
+#define SPIDAT	 (*(volatile uint32_t*)0xE0000070)
+#define SPICTRL	 (*(volatile uint32_t*)0xE0000074)
+#define SPISTA	 (*(volatile uint32_t*)0xE0000074)
+#define SPISS	 (*(volatile uint32_t*)0xE0000078)
+
+#define SPI1DAT	 (*(volatile uint32_t*)0xE0000060)
+#define SPI1CTRL (*(volatile uint32_t*)0xE0000064)
+#define SPI1STA	 (*(volatile uint32_t*)0xE0000064)
+#define SPI1SS	 (*(volatile uint32_t*)0xE0000068)
+
+#define MAX_COUNT (*(volatile uint32_t*)0xE0000040)
+#define TIMER     (*(volatile uint32_t*)0xE0000040)
+
+#define GPOUT    (*(volatile uint32_t*)0xE0000030)
+#define GPIN     (*(volatile uint32_t*)0xE0000034)
+
+#define IRQEN	 (*(volatile uint32_t*)0xE0000020)	//Enable
+#define IRQVECT0 (*(volatile uint32_t*)0xE0000000)	//TRAP
+#define IRQVECT1 (*(volatile uint32_t*)0xE0000004)	//Timer
+#define IRQVECT2 (*(volatile uint32_t*)0xE0000008)	//RX0
+#define IRQVECT3 (*(volatile uint32_t*)0xE000000C)	//TX0
+#define IRQVECT4 (*(volatile uint32_t*)0xE0000010)	//RX1
+#define IRQVECT5 (*(volatile uint32_t*)0xE0000014)	//TX1
+#define IRQVECT6 (*(volatile uint32_t*)0xE0000018)	//RX2
+#define IRQVECT7 (*(volatile uint32_t*)0xE000001C)	//TX2
+
+// GPOUT
+#define LORA_RESET  (1u<<10)
+#define L_RX        (1u<<9)
+#define L_TX        (1u<<8)
+#define EN_5V_UP    (1u<<7)
+#define EN_5V_M4    (1u<<6)
+#define EN_1V4_M4   (1u<<5)
+#define M2_ON_OFF   (1u<<4)
+#define LED3        (1u<<3)
+#define LED2        (1u<<2)
+#define LED1        (1u<<1)
+#define LED0        (1u<<0)
+
+// GPIN
+#define LORA_DIO1   (1u<<1)
+#define LORA_BUSY   (1u<<0)
+
+// IRQ bits
+#define IRQ_TIMER     (1u<<1)
+#define IRQ_UART0_RX  (1u<<2)
+#define IRQ_UART0_TX  (1u<<3)
+#define IRQ_UART1_RX  (1u<<4)
+#define IRQ_UART1_TX  (1u<<5)
+#define IRQ_UART2_RX  (1u<<6)
+#define IRQ_UART2_TX  (1u<<7)
+
+
+void delay_loop(uint32_t val);	// (3 + 3*val) cycles
+#define CCLK (18000000u)
+#define _delay_us(n) delay_loop((n*(CCLK/1000)-3000)/3000)
+#define _delay_ms(n) delay_loop((n*(CCLK/1000)-30)/3)
+ 
+void _putch(int c)
+{
+	while((UARTSTA&2)==0);
+	//if (c == '\n') _putch('\r');
+	UARTDAT = c;
+}
+
+void _puts(const char *p)
+{
+	while (*p)
+		_putch(*(p++));
+}
+ 
+
+uint8_t _getch()
+{
+	while((UARTSTA&1)==0);
+	return UARTDAT;
+}
+
+uint8_t haschar() {return UARTSTA&1;}
+
+
+// --------------------------------------------------------
+//FIFOs
+uint8_t udat[32];				//FIFO UART0
+volatile uint8_t rdix,wrix;		//Punteros de lectura y escritura
+
+//CHANGED
+uint8_t udat1[32]; 				//FIFO UART1
+volatile uint8_t rdix1,wrix1; 	//Punteros de lectura y escritura
+
+uint8_t udat2[32]; 				//FIFO UART2
+volatile uint8_t rdix2,wrix2; 	//Punteros de lectura y escritura
+
+//Lectura UART0
+uint8_t _getchUART0()
+{
+	uint8_t d;
+	while(rdix==wrix);
+	d=udat[rdix++];
+	rdix&=31;
+	return d;
+}
+
+//Lectura UART1 (para GPS)
+uint8_t _getchUART1()
+{
+	uint8_t d;
+	while(rdix1==wrix1);
+	d=udat1[rdix1++];
+	rdix1&=127;
+	return d;
+}
+
+#define putchar(d) _putch(d)
+#include "printf.c"
+#include "ModuloGPS.c" 
+#include "ModuloBME.c"
+#include "SPI.c"
+#include "lora_sx1262.c"
+#include "MCP3004.c"
+#include "ModuloMQ9.c"
+#include "GP2Y1010.c"
+ 
+const static char *menutxt="\n"
+"\n\n"
+"888                8888888b.  888     888\n"         
+"888                888   Y88b 888     888\n"        
+"888                888    888 888     888\n"       
+"888        8888b.  888   d88P Y88b   d88P 8888b.\n"  
+"888           '88b 8888888P'   Y88b d88P     '88b\n"
+"888       .d888888 888 T88b     Y88o88P  .d888888\n" 
+"888888888 888  888 888  T88b     Y888P   888  888\n"
+"888888888 'Y888888 888   T88b     Y8P    'Y888888\n"
+"\nIts Alive :-)\n" 
+"\n";             
+
+                  
+//uint8_t haschar() {return wrix-rdix;}
+
+uint32_t __attribute__((naked)) getMEPC()
+{
+	asm volatile(
+	//"	csrrw	a0,0x341,zero	\n"
+	//"	csrrw	zero,0x341,a0	\n"
+	"	.word	0x34101573 		\n"
+	"	.word   0x34151073		\n"
+	"	ret						\n"
+	);
+}
+
+
+//INTERRUPCIONES
+
+void __attribute__((interrupt ("machine"))) irq0_handler()
+{
+	_printf("\nTRAP at 0x%x\n",getMEPC());
+}
+
+// UART RX
+void __attribute__((interrupt ("machine"))) irq1_handler()
+{ 
+	udat[wrix++]=UARTDAT;
+	wrix&=31;
+} 
+// UART TX
+void  __attribute__((interrupt ("machine"))) irq2_handler(){
+	static uint8_t a=32;
+	UARTDAT=a;
+	if (++a>=128) a=32;
+} 
+	 
+// TIMER
+void __attribute__((interrupt("machine"))) irq3_handler()
+{
+	IRQEN = 0b00000000;	//Deshabilitamos la interrupción del timer
+	switch(estado){ 
+		case 0: 
+			Lectura_C0();
+			break;
+		case 1:
+			Lectura_CH4();
+			break;
+		case 2:
+			_printf("Medidas obtenidas. \n");
+			break;
+			
+		default:
+			break;
+	}
+	//_printf("Fin interrupcion");
+}
+
+// UART RX1
+void __attribute__((interrupt("machine"))) irq4_handler()
+{
+	lectura_GPS();
+	IRQEN = 0b00000000;
+}
+
+// UART TX1
+void __attribute__((interrupt("machine"))) irq5_handler()
+{
+	static uint8_t a = 32;
+	UART1DAT = a;
+	if (++a >= 128)
+		a = 32;
+}
+
+// UART RX2
+void __attribute__((interrupt("machine"))) irq6_handler()
+{
+	static uint8_t a = 32;
+	UART2DAT = a;
+	if (++a >= 128)
+		a = 32;
+}
+
+// UART TX2
+void __attribute__((interrupt("machine"))) irq7_handler()
+{
+	static uint8_t a = 32;
+	UART2DAT = a;
+	if (++a >= 128)
+		a = 32;
+}
+
+// --------------------------------------------------------
+
+#define BAUD 115200u
+#define BAUD1 9600u
+#define BAUD2 115200u
+#define NULL ((void *)0)
+
+
+const unsigned static char *menu="\n"
+"________________________________________________\n"
+"\n"
+"    Seleccione: s -> Valores de los sensores    \n"
+"    Seleccione: a -> Leer canales ADC           \n"
+"    Seleccione: m -> Leer gases MQ9             \n"
+"    Seleccione: u -> EN_5V_UP on/off            \n"
+"    Seleccione: v -> EN_5V_M4 on/off            \n"
+"    Seleccione: w -> EN_1V4_M4 on/off           \n"
+"    Seleccione: i -> Leer TIMER                 \n"
+"    Seleccione: p -> Leer GP2Y1010              \n"
+"    Seleccione: l -> Leds pares/impares         \n"
+"    Seleccione: c -> Prueba de campo LoRa       \n"
+"    Seleccione: r -> Recibir LoRa               \n"
+"    Seleccione: t -> Transmitir LoRa            \n"
+"    Seleccione: g -> GPS                        \n"
+"    Seleccione: q -> Salir                      \n"
+"________________________________________________\n"
+"\n\n";
+
+static void toggle_gpout(uint32_t mask, const char *label)
+{
+	if (GPOUT & mask) {
+		GPOUT &= ~mask;
+		_printf("%s OFF\n", label);
+	} else {
+		GPOUT |= mask;
+		_printf("%s ON\n", label);
+	}
+}
+
+static int ft_strlen(const char *s)
+{
+	int len = 0;
+
+	if (s == NULL) return 0;
+	while (s[len] != '\0') {
+		len++;
+	}
+	return len;
+}
+
+static void blink_leds_even_odd(void)
+{
+	uint32_t led_mask = LED0 | LED1 | LED2 | LED3;
+	uint32_t keep = GPOUT & ~led_mask;
+
+	GPOUT = keep | (LED0 | LED2);
+	_delay_ms(200);
+	GPOUT = keep | (LED1 | LED3);
+	_delay_ms(200);
+	GPOUT = keep;
+}
+
+   
+  
+void main()
+{
+	char c,buf[17];
+	uint8_t *p;
+	unsigned int i,j;
+	int n;
+	void (*pcode)();
+	uint32_t *pi;
+	uint16_t *ps;
+	int temp_comp,press_comp, hum_comp;
+	unsigned char readDATA;
+	   
+	//registro control spi 0
+	SPICTRL = (8<<8)|8;  
+	//registro control spi 1
+	SPI1CTRL = (8<<8)|8;
+	UARTBAUD  =(CCLK+BAUD/2)/BAUD - 1; 
+	//CHANGED
+	UART1BAUD =(CCLK+BAUD1/2)/BAUD1 - 1;	
+	UART2BAUD =(CCLK+BAUD2/2)/BAUD2 - 1;
+         
+	//_delay_ms(100); 
+	c = UARTDAT;		// Clear RX garbage
+	c = UART1DAT;		// Clear RX garbage
+	         
+	//Inicializamos vectores de interrupcion
+	IRQVECT0=(uint32_t)irq0_handler;
+	IRQVECT1=(uint32_t)irq1_handler;
+	IRQVECT2=(uint32_t)irq2_handler;
+	IRQVECT3=(uint32_t)irq3_handler;
+	IRQVECT4=(uint32_t)irq4_handler;
+	IRQVECT5=(uint32_t)irq5_handler;
+	IRQVECT6=(uint32_t)irq6_handler;
+	IRQVECT7=(uint32_t)irq7_handler;
+	         
+	IRQEN=1;			// Enable UART RX IRQ
+
+	// Habilitar timer con IRQ para que TIMER avance.
+	MAX_COUNT = 0xFFFFFFFFu;
+	IRQEN |= IRQ_TIMER;
+	
+	uint8_t Buff[500];
+	
+	asm volatile ("ecall");
+	asm volatile ("ebreak");
+ 
+	//unsigned int inicio = LoraSx1262_begin();
+
+	
+	while (1)      
+	{     
+			_puts(menu);
+			char cmd = _getch();
+			if (cmd > 32 && cmd < 127)
+				_putch(cmd); 
+			_puts("\n"); 
+           
+			switch (cmd){ 
+			//Transmisión del LoRa	
+			case 't':   
+				if(SX1262_Init()){
+					_printf("Modulo LoRa iniciado\n");
+					SX1262_configSetFrequency(868000000);
+					SX1262_configSetBandwidth(4);      //125 kHz
+					SX1262_configSetSpreadingFactor(7); //SF7
+					SX1262_transmit((uint8_t *)"Hola Mundo!", 11);
+				}
+				else {
+					_printf("Error al iniciar el LoRa\n");
+				}
+				break;
+
+
+			//Recepción del LoRa
+			case 'r':
+			if(SX1262_Init()){
+					_printf("Modulo LoRa iniciado\n");
+					SX1262_configSetFrequency(868000000);
+					SX1262_configSetBandwidth(4);      //125 kHz
+					SX1262_configSetSpreadingFactor(7); //SF7
+					SX1262_lora_receive_async(Buff, 500);
+				} 
+				else {
+					_printf("Error al iniciar el LoRa\n");
+				}
+				break;
+
+			//Prueba de campo LoRa (envio cada 1 s).
+			case 'c': {
+				int msg_id = 0;
+				char lat[16];
+				char lon[16];
+				char msg[200];
+
+				if(!SX1262_Init()){
+					_printf("Error al iniciar el LoRa\n");
+					break;
+				}
+
+				SX1262_configSetFrequency(868000000);
+				SX1262_configSetBandwidth(4);      //125 kHz
+				SX1262_configSetSpreadingFactor(7); //SF7
+
+				while (!haschar()) {
+					startBME680();
+					temp_comp = returnTemp();
+					press_comp = returnPressure();
+					hum_comp = returnHUMIDITY(temp_comp);
+
+					GPS_ReadLatLon(lat, (int)sizeof(lat), lon, (int)sizeof(lon));
+
+					_sprintf(msg,
+					         "##%5d Grupo 2, T= %02d.%02d, H= %02d.%03d %%, P=%d, LAT = %10s, LON = %10s.",
+					         msg_id,
+					         temp_comp/100, temp_comp%100,
+					         hum_comp/1000, hum_comp%1000,
+					         press_comp,
+					         lat, lon);
+
+					_printf("%s\n", msg);
+					SX1262_transmit((uint8_t *)msg, ft_strlen(msg));
+					msg_id++;
+					_delay_ms(1000);
+				}
+
+				if (haschar()) _getch();
+				break;
+			}
+				
+				
+			//Sensores de humedad, temperatura y presión.	
+			case 's':               
+				startBME680(); 
+			    temp_comp =returnTemp();
+				press_comp = returnPressure();
+				hum_comp = returnHUMIDITY(temp_comp);
+				
+				_printf("----------------------------------------------\n");
+				_printf("------------------- BME680 -------------------\n");
+				_printf("----------------------------------------------\n");
+				_printf("                                                ");
+				_printf("\n La temperatura registrada es: ");
+				_printf("%02d.%d%c", temp_comp/100, temp_comp%100, 167);
+				_printf("\n La presion registrada es: ");
+				_printf("%d Pascales",press_comp/100);
+				_printf("\n La humedad registrada es: ");
+				_printf("%02d.%03d%c", hum_comp/1000, hum_comp%1000, 37);
+				_printf("                                              \n");
+				_printf("\n\n");
+				_printf("----------------------------------------------\n");    
+				break;
+
+			//Lectura inmediata MQ9.
+			case 'm': {
+				int co_ppm = MQ9_ReadCOppm(MCP3004_CH0);
+				int ch4_ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
+
+				_printf("----------------------------------------------\n");
+				_printf("---------------- MQ9 GASES -------------------\n");
+				_printf("----------------------------------------------\n");
+				_printf("CO: %d ppm\n", co_ppm);
+				_printf("CH4: %d ppm\n", ch4_ppm);
+				_printf("----------------------------------------------\n");
+				break;
+			}
+			//Control manual de alimentaciones.
+			case 'u':
+				toggle_gpout(EN_5V_UP, "EN_5V_UP");
+				break;
+			case 'v':
+				toggle_gpout(EN_5V_M4, "EN_5V_M4");
+				break;
+			case 'w':
+				toggle_gpout(EN_1V4_M4, "EN_1V4_M4");
+				break;
+			//Estado del TIMER.
+			case 'i':
+				if ((IRQEN & IRQ_TIMER) == 0) {
+					MAX_COUNT = 0xFFFFFFFFu;
+					IRQEN |= IRQ_TIMER;
+				}
+				_printf("TIMER: %u\n", TIMER);
+				break;
+			//Sensor polvo GP2Y1010.
+			case 'p': {
+				int raw = GP2Y1010_ReadRaw(MCP3004_CH1);
+				_printf("GP2Y1010 ADC: %d\n", raw);
+				break;
+			}
+			//LEDs pares e impares.
+			case 'l':
+				blink_leds_even_odd();
+				break;
+
+			//Lectura ADC MCP3004.
+			case 'a': {
+				int adc0, adc1, adc2, adc3;
+
+				adc0 = MCP3004_Read(MCP3004_CH0);
+				adc1 = MCP3004_Read(MCP3004_CH1);
+				adc2 = MCP3004_Read(MCP3004_CH2);
+				adc3 = MCP3004_Read(MCP3004_CH3);
+
+				_printf("----------------------------------------------\n");
+				_printf("---------------- ADC MCP3004 -----------------\n");
+				_printf("----------------------------------------------\n");
+				_printf("CH0: %d\n", adc0);
+				_printf("CH1: %d\n", adc1);
+				_printf("CH2: %d\n", adc2);
+				_printf("CH3: %d\n", adc3);
+				_printf("----------------------------------------------\n");
+				break;
+			}
+				
+			//GPS 	
+			case 'g': 
+				lectura_GPS(); 
+				break;
+				  
+			case 'q':
+				return;
+					
+			default:
+				continue;
+			}
+	}
+}
+
+
+
+================================================
+FILE: MCP3004.c
+================================================
+#include "MCP3004.h"
+#include "SPI.h"
+
+static int MCP3004_ReadADC(uint8_t channel, uint8_t single)
+{
+	if (channel >= MCP3004_CHANNELS) return 0;
+
+	uint8_t data[3] = {0, 0, 0};
+	data[0] = 0x01;
+	data[1] = single ? 0x80 : 0x00;
+	data[1] |= (channel << 4);
+
+	SPISS = ADC_CS;
+	data[0] = spixfer(data[0]);
+	data[1] = spixfer(data[1]);
+	data[2] = spixfer(data[2]);
+	SPISS = 0b11;
+
+	return ((data[1] << 8) | data[2]) & MCP3004_MAX_VALUE;
+}
+
+int MCP3004_Read(uint8_t channel)
+{
+	return MCP3004_ReadADC(channel, 1);
+}
+
+int MCP3004_DifferentialRead(uint8_t channel)
+{
+	return MCP3004_ReadADC(channel, 0);
+}
+
+void MCP3004_ReadMultiple(const uint8_t *channels, uint8_t numChannels, int *readings)
+{
+	uint8_t i;
+	for (i = 0; i < numChannels; i++) {
+		readings[i] = MCP3004_Read(channels[i]);
+	}
+}
+
+int MCP3004_Read_Reg(unsigned char channel)
+{
+	return MCP3004_Read((uint8_t)channel);
+}
+
+
+
+================================================
+FILE: MCP3004.h
+================================================
+#pragma once
+
+#include <stdint.h>
+
+#define ADC_CS 0b01
+
+#define MCP3004_CHANNELS 4
+#define MCP3004_MAX_VALUE 1023
+
+#define MCP3004_CH0 0
+#define MCP3004_CH1 1
+#define MCP3004_CH2 2
+#define MCP3004_CH3 3
+
+int MCP3004_Read(uint8_t channel);
+int MCP3004_DifferentialRead(uint8_t channel);
+void MCP3004_ReadMultiple(const uint8_t *channels, uint8_t numChannels, int *readings);
+
+int MCP3004_Read_Reg(unsigned char channel);
+
+
+
+
+
+================================================
+FILE: ModuloBME.c
+================================================
+
+void startBME680(){ //Inicializamos modulo BME
+	//Hacemos reset de los registros del módulo
+	writeBME680(0xB6,RESET_BME);
+
+	writeBME680(0x10,STATUS_BME);
+	// 1.Set humidity oversampling to 1x by writing 0b001 to osrs_h
+	writeBME680(0x01,CTRL_HUM);
+	// 2.Set temperature oversampling to 2x by writing 0b010 to osrs_t
+	// 3.Set pressure oversampling to 16x  by writing 0b101 to osrs_p
+	writeBME680(0x54,CTRL_MEAS);
+	// 4.Set gas_wait_0 to 0x59 to select 100 ms heat up duration
+	writeBME680(0x59,gas_wait0);
+	// 5.Set the corresponding heater set-point by writing the target heater resistance to res_heat_0
+	writeBME680(0x00,res_heat0);
+	// 6.Set nb_conv to 0x0 to select the previously defined heater settings
+	// 7.Set run_gas_l to 1 to enable gas measurements
+	writeBME680(0x10,CTRL_GAS_1);
+	// 8.Set mode to 0b01 to trigger a single measurement.
+	writeBME680(0x55,CTRL_MEAS);
+}
+
+void writeBME680(char data,char dir){
+     SPISS = CS_BME680; //Seleccionamos el chipSelect
+     spixfer(0x00|dir); //Pasamos direccion
+     spixfer(data); //Pasamos dato
+     SPISS = 0b11; //Devolvemos a 1 chip select
+}
+
+char readBME680(char dir){ //Lectura del registro de una direccion de memoria concreta
+    unsigned char readDATA;
+    SPISS = CS_BME680;//Seleccionamos chip select
+	
+    spixfer(0x80|dir); //Lectura del SPI
+    readDATA = spixfer(0); //Enviamos 0
+    SPISS=0b11;
+	//_printf("\n El valor del registro %x: es %d ", dir, readDATA);
+    return readDATA;
+}
+
+int returnTemp(){
+
+    int par_t1, par_t2, par_t3, temp_adc, var1, var2, var3, t_fine, temp_comp;
+
+	writeBME680(0x00,STATUS_BME); //entramos a la página 0 de los registros
+
+    par_t1 = (int32_t)((readBME680(0xEA) << 8) | readBME680(0xE9));
+    par_t2 = (int32_t)((readBME680(0x8B) << 8) | readBME680(0x8A));
+    par_t3 = (int32_t)readBME680(0x8C);
+	
+	writeBME680(0x10,STATUS_BME); //entramos a la página 1 de los registros
+    temp_adc = (int32_t)((readBME680(0x22) << 12) | (readBME680(0x23) << 4) | (readBME680(0x24) >> 4));
+
+    var1 = ((int32_t)temp_adc >> 3) - ((int32_t)par_t1 << 1);
+    var2 = (var1 * (int32_t)par_t2) >> 11;
+    var3 = ((((var1 >> 1) * (var1 >> 1)) >> 12) * ((int32_t)par_t3 << 4)) >> 14;
+    t_fine = var2 + var3;
+    temp_comp = ((t_fine * 5) + 128) >> 8;
+	
+    return temp_comp;
+}
+int returnPressure(){
+
+    int par_p1, par_p2, par_p3, par_p4, par_p5, par_p6, par_p7, par_p8, par_p9, par_p10, press_adc,press_comp;
+    int var1, var2, var3, t_fine;
+	
+	writeBME680(0x00,STATUS_BME); //entramos a la página 0 de los registros
+
+    par_p1 = (int32_t)((readBME680(0x8F) << 8) | readBME680(0x8E));
+    par_p2 = (int32_t)((readBME680(0x91) << 8) | readBME680(0x90));
+    par_p3 = (int32_t)readBME680(0x92);
+    par_p4 = (int32_t)((readBME680(0x95) << 8) | readBME680(0x94));
+    par_p5 = (int32_t)((readBME680(0x97) << 8) | readBME680(0x96));
+    par_p6 = (int32_t)readBME680(0x99);
+    par_p7 = (int32_t)readBME680(0x98);
+    par_p8 = (int32_t)((readBME680(0x9D) << 8) | readBME680(0x9C));
+    par_p9 = (int32_t)((readBME680(0x9F) << 8) | readBME680(0x9E));
+    par_p10 = (int32_t)readBME680(0xA0);
+	
+	writeBME680(0x10,STATUS_BME); //entramos a la página 1 de los registros
+    press_adc = (int32_t)((readBME680(0x1F) << 12) | (readBME680(0x20) << 4) | (readBME680(0x21) >> 4));
+
+    var1 = ((int32_t)t_fine >> 1) - 64000;
+    var2 = ((((var1 >> 2) * (var1 >> 2)) >> 11) * (int32_t)par_p6) >> 2;
+    var2 = var2 + ((var1 * (int32_t)par_p5) << 1);
+    var2 = (var2 >> 2) + ((int32_t)par_p4 << 16);
+    var1 = (((((var1 >> 2) * (var1 >> 2)) >> 13) * ((int32_t)par_p3 << 5)) >> 3) + (((int32_t)par_p2 * var1) >> 1);
+    var1 = var1 >> 18;
+    var1 = ((32768 + var1) * (int32_t)par_p1) >> 15;
+    press_comp = 1048576 - press_adc;
+    press_comp = (uint32_t)((press_comp - (var2 >> 12)) * ((uint32_t)3125));
+    if (press_comp >= (1 << 30)) press_comp = ((press_comp / (uint32_t)var1) << 1);
+    else press_comp = ((press_comp << 1) / (uint32_t)var1);
+    var1 = ((int32_t)par_p9 * (int32_t)(((press_comp >> 3) * (press_comp >> 3)) >> 13)) >> 12;
+    var2 = ((int32_t)(press_comp >> 2) * (int32_t)par_p8) >> 13;
+    var3 = ((int32_t)(press_comp >> 8) * (int32_t)(press_comp >> 8) * (int32_t)(press_comp >> 8) * (int32_t)par_p10) >> 17;
+    press_comp = (int32_t)(press_comp) + ((var1 + var2 + var3 + ((int32_t)par_p7 << 7)) >> 4);
+
+    return press_comp;
+}
+
+int returnHUMIDITY(int temp_comp){
+    int par_h1, par_h2, par_h3, par_h4, par_h5, par_h6, par_h7, hum_adc,temp_scaled, hum_comp;
+	int var1, var2, var3, var4, var5, var6;
+	
+	writeBME680(0x00,STATUS_BME); //entramos a la página 0 de los registros
+	
+    par_h1 = (int32_t)((readBME680(0xE3) << 4) | (readBME680(0xE2) & 0b00001111));
+    par_h2 = (int32_t)((readBME680(0xE1) << 4) | (readBME680(0xE2) >> 4));
+    par_h3 = (int32_t)readBME680(0xE4);
+    par_h4 = (int32_t)readBME680(0xE5);
+    par_h5 = (int32_t)readBME680(0xE6);
+    par_h3 = (int32_t)readBME680(0xE7);
+    par_h3 = (int32_t)readBME680(0xE8);
+	
+	writeBME680(0x10,STATUS_BME); //entramos a la página 1 de los registros
+    hum_adc = (int32_t)((readBME680(0x25) << 8) | readBME680(0x26));
+
+    temp_scaled = (int32_t)temp_comp;
+    var1 = (int32_t)hum_adc - (int32_t)((int32_t)par_h1 << 4) - (((temp_scaled * (int32_t)par_h3) / ((int32_t)100)) >> 1);
+    var2 = ((int32_t)par_h2 * (((temp_scaled * (int32_t)par_h4) / ((int32_t)100)) + (((temp_scaled * ((temp_scaled * (int32_t)par_h5) / ((int32_t)100))) >> 6) / ((int32_t)100)) + ((int32_t)(1 << 14)))) >> 10;
+    var3 = var1 * var2;
+    var4 = (((int32_t)par_h6 << 7) + ((temp_scaled * (int32_t)par_h7) / ((int32_t)100))) >> 4;
+    var5 = ((var3 >> 14) * (var3 >> 14)) >> 10;
+    var6 = (var4 * var5) >> 1;
+    hum_comp = (((var3 + var6) >> 10) * ((int32_t) 1000)) >> 12;
+
+    return hum_comp;
+}
+
+
+
+================================================
+FILE: ModuloBME.h
+================================================
+#define CS_BME680 0b10
+
+#define STATUS_BME 0x73 //Status [page]
+#define RESET_BME 0x60
+#define ID_BME 0x50
+
+#define Config_BME 0x75
+#define CTRL_MEAS 0x74
+#define CTRL_HUM 0x72
+#define CTRL_GAS_1 0x71
+#define CTRL_GAS_0 0x70
+
+#define gas_wait0 0x6D
+#define gas_wait1 0x6C
+#define gas_wait2 0x6B
+#define gas_wait3 0x6A
+#define gas_wait4 0x69
+#define gas_wait5 0x68
+#define gas_wait6 0x67
+#define gas_wait7 0x66
+#define gas_wait8 0x65
+#define gas_wait9 0x64
+
+#define res_heat0 0x63
+#define res_heat1 0x62
+#define res_heat2 0x61
+#define res_heat3 0x60
+#define res_heat4 0x5F
+#define res_heat5 0x5E
+#define res_heat6 0x5D
+#define res_heat7 0x5C
+#define res_heat8 0x5B
+#define res_heat9 0x5A
+
+void startBME680();
+void writeBME680(char data,char dir);
+char readBME680(char dir);
+int returnTemp();
+int returnPressure();
+int returnHUMIDITY(int temp_comp);
+
+
+================================================
+FILE: ModuloGPS.c
+================================================
+Error reading file with 'UTF-8': 'utf-8' codec can't decode byte 0xf1 in position 1403: invalid continuation byte
+
+
+================================================
+FILE: ModuloGPS.h
+================================================
+
+void procesaCadena(const char *cadena, const char delimitador) ;
+void lectura_GPS();
+int mi_strcmp(char *s1, char *s2);
+int GPS_ReadLatLon(char *lat, int lat_len, char *lon, int lon_len);
+
+
+
+================================================
+FILE: ModuloMQ9.c
+================================================
+
+#include "ModuloMQ9.h"
+#include "MCP3004.h"
+
+#define MQ9_ADC_BITS 1024
+// 330 -> 3.30V scaled like the original integer conversion.
+#define MQ9_ADC_SCALE 330
+#define MQ9_CO_DIV 7
+#define MQ9_CH4_DIV 1
+
+static int mq9_scale_adc(int raw)
+{
+	return (raw * MQ9_ADC_SCALE) / MQ9_ADC_BITS;
+}
+
+static int mq9_ppm_from_scaled(int scaled, int div)
+{
+	if (div == 0) return 0;
+	return (10 * scaled) / div;
+}
+
+int MQ9_ReadCOppm(uint8_t channel)
+{
+	int raw = MCP3004_Read(channel);
+	int scaled = mq9_scale_adc(raw);
+	return mq9_ppm_from_scaled(scaled, MQ9_CO_DIV);
+}
+
+int MQ9_ReadCH4ppm(uint8_t channel)
+{
+	int raw = MCP3004_Read(channel);
+	int scaled = mq9_scale_adc(raw);
+	return mq9_ppm_from_scaled(scaled, MQ9_CH4_DIV);
+}
+
+void Lectura_Gas(void)
+{
+	estado = 0;
+	ENABLE_5V;
+	IRQEN = IRQ_TIMER;
+	MAX_COUNT = 1 * 1000000;
+}
+
+void Lectura_C0(void)
+{
+	int ppm;
+
+	ppm = MQ9_ReadCOppm(MCP3004_CH0);
+
+	DISABLE_5V_1V4;
+	ENABLE_1V4;
+
+	IRQEN = IRQ_TIMER;
+	MAX_COUNT = 1 * 1000000;
+
+	estado = 1;
+
+	lectura_CO = ppm;
+	_printf("Medicion de C0 en curso, por favor espere 60 seg.\n");
+	_printf("Lectura CO: %d ppm \n", lectura_CO);
+	_printf("Medicion de CH4 en curso, por favor espere 90 seg.\n");
+}
+
+void Lectura_CH4(void)
+{
+	int ppm;
+
+	ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
+
+	DISABLE_5V_1V4;
+
+	estado = 2;
+
+	lectura_CH4 = ppm;
+	_printf("Lectura CH4: %d ppm \n", lectura_CH4);
+}
+
+
+
+
+================================================
+FILE: ModuloMQ9.h
+================================================
+#pragma once
+
+#include <stdint.h>
+
+#define ENABLE_5V	(GPOUT = (EN_5V_UP | EN_5V_M4))
+#define ENABLE_1V4	(GPOUT = EN_1V4_M4)
+#define DISABLE_5V_1V4	(GPOUT = 0u)
+
+int MQ9_ReadCOppm(uint8_t channel);
+int MQ9_ReadCH4ppm(uint8_t channel);
+
+void Lectura_Gas(void);
+void Lectura_C0(void);
+void Lectura_CH4(void);
+
+
+
+================================================
+FILE: printf.c
+================================================
+/*
+	putchar is the only external dependency for this file,
+	if you have a working putchar, leave it commented out.
+	If not, uncomment the define below and
+	replace outbyte(c) by your own function call.
+
+#define putchar(c) outbyte(c)
+*/
+
+#include <stdarg.h>
+
+static void printchar(char **str, int c)
+{
+	extern void putchar(int c);
+	
+	if (str) {
+		**str = c;
+		++(*str);
+	}
+	else (void)putchar(c);
+}
+
+#define PAD_RIGHT 1
+#define PAD_ZERO 2
+
+static int prints(char **out, const char *string, int width, int pad)
+{
+	register int pc = 0, padchar = ' ';
+
+	if (width > 0) {
+		register int len = 0;
+		register const char *ptr;
+		for (ptr = string; *ptr; ++ptr) ++len;
+		if (len >= width) width = 0;
+		else width -= len;
+		if (pad & PAD_ZERO) padchar = '0';
+	}
+	if (!(pad & PAD_RIGHT)) {
+		for ( ; width > 0; --width) {
+			printchar (out, padchar);
+			++pc;
+		}
+	}
+	for ( ; *string ; ++string) {
+		printchar (out, *string);
+		++pc;
+	}
+	for ( ; width > 0; --width) {
+		printchar (out, padchar);
+		++pc;
+	}
+
+	return pc;
+}
+
+/* the following should be enough for 32 bit int */
+#define PRINT_BUF_LEN 12
+
+static int printi(char **out, int i, int b, int sg, int width, int pad, int letbase)
+{
+	char print_buf[PRINT_BUF_LEN];
+	register char *s;
+	register int t, neg = 0, pc = 0;
+	register unsigned int u = i;
+
+	if (i == 0) {
+		print_buf[0] = '0';
+		print_buf[1] = '\0';
+		return prints (out, print_buf, width, pad);
+	}
+
+	if (sg && b == 10 && i < 0) {
+		neg = 1;
+		u = -i;
+	}
+
+	s = print_buf + PRINT_BUF_LEN-1;
+	*s = '\0';
+
+	while (u) {
+		t = u % b;
+		if( t >= 10 )
+			t += letbase - '0' - 10;
+		*--s = t + '0';
+		u /= b;
+	}
+
+	if (neg) {
+		if( width && (pad & PAD_ZERO) ) {
+			printchar (out, '-');
+			++pc;
+			--width;
+		}
+		else {
+			*--s = '-';
+		}
+	}
+
+	return pc + prints (out, s, width, pad);
+}
+
+static int print(char **out, const char *format, va_list args )
+{
+	register int width, pad;
+	register int pc = 0;
+	char scr[2];
+
+	for (; *format != 0; ++format) {
+		if (*format == '%') {
+			++format;
+			width = pad = 0;
+			if (*format == '\0') break;
+			if (*format == '%') goto out;
+			if (*format == '-') {
+				++format;
+				pad = PAD_RIGHT;
+			}
+			while (*format == '0') {
+				++format;
+				pad |= PAD_ZERO;
+			}
+			for ( ; *format >= '0' && *format <= '9'; ++format) {
+				width *= 10;
+				width += *format - '0';
+			}
+			if( *format == 's' ) {
+				register char *s = (char *)va_arg( args, int );
+				pc += prints (out, s?s:"(null)", width, pad);
+				continue;
+			}
+			if( *format == 'd' ) {
+				pc += printi (out, va_arg( args, int ), 10, 1, width, pad, 'a');
+				continue;
+			}
+			if( *format == 'x' ) {
+				pc += printi (out, va_arg( args, int ), 16, 0, width, pad, 'a');
+				continue;
+			}
+			if( *format == 'X' ) {
+				pc += printi (out, va_arg( args, int ), 16, 0, width, pad, 'A');
+				continue;
+			}
+			if( *format == 'u' ) {
+				pc += printi (out, va_arg( args, int ), 10, 0, width, pad, 'a');
+				continue;
+			}
+			if( *format == 'c' ) {
+				/* char are converted to int then pushed on the stack */
+				scr[0] = (char)va_arg( args, int );
+				scr[1] = '\0';
+				pc += prints (out, scr, width, pad);
+				continue;
+			}
+		}
+		else {
+		out:
+			printchar (out, *format);
+			++pc;
+		}
+	}
+	if (out) **out = '\0';
+	va_end( args );
+	return pc;
+}
+
+int _printf(const char *format, ...)
+{
+        va_list args;
+        
+        va_start( args, format );
+        return print( 0, format, args );
+}
+
+int _sprintf(char *out, const char *format, ...)
+{
+        va_list args;
+        
+        va_start( args, format );
+        return print( &out, format, args );
+}
+
+
+
+================================================
+FILE: SPI.c
+================================================
+
+/*	------ 
+
+    SPI Control:   bits 31-14  bits 13-8  bits 7-0 
+                      xxxx        DLEN     DIVIDER 
+
+        DLEN:    Data lenght (8 to 32 bits) 
+        DIVIDER: SCK frequency = Fclk / (2*(DIVIDER+1)) 
+
+    SPI Flags:     bits 31-1  bit 0
+                      xxxx     BUSY 
+
+        BUSY:  SPI exchanging data when 1 
+
+    SPI Slave Select: bits 31-2  bit 1   bit 0 
+                         xxxx     ss1     ss0 
+
+        ss0 : Selects the SPI slave 0 when 0 (active low) 
+        ss1 : Selects the SPI slave 1 when 0 (active low) 
+
+    ------ */
+
+#define FREQ_SPI 1000000
+
+#define DIV_SPI 	((CCLK/(2*FREQ_SPI))-1) 			// Calculamos el divisor para que la frecuencia sea 1MHz
+
+
+// --------------------------------------------------------
+// SPI
+unsigned char spixfer (unsigned char d)
+{
+	SPIDAT=d;
+	while(SPISTA&1);
+	return SPIDAT;
+}
+
+// SPI1
+unsigned char spixfer1 (unsigned char d)
+{
+	SPI1DAT=d;
+	while(SPI1STA&1);
+	return SPI1DAT;
+}
+// --------------------------------------------------------
+
+
+================================================
+FILE: SPI.h
+================================================
+
+unsigned char spixfer (unsigned char d);
+unsigned char spixfer1 (unsigned char d);
+
+
+================================================
+FILE: Arduino-LoRa-Sx1262-main/src/LoraSx1262.h
+================================================
+/*License: Creative Commons 4.0 - Attribution, NonCommercial
+* https://creativecommons.org/licenses/by-nc/4.0/
+* Author: Mitch Davis (2023). github.com/thekakester
+* 
+* You are free to:
+*    Share — copy and redistribute the material in any medium or format
+*    Adapt — remix, transform, and build upon the material
+* Under the following terms:
+*    Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+*                  You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+*    NonCommercial — You may not use the material for commercial purposes.
+*
+* No warranties are given. The license may not give you all of the permissions necessary for your intended use.
+* For example, other rights such as publicity, privacy, or moral rights may limit how you use the material
+*/
+
+#ifndef __LORA1262__
+#define __LORA1262__
+
+#include <Arduino.h>
+#include <SPI.h>
+
+/* Wiring requirements (for default shield pinout)
+# +-----------------+-------------+------------+
+# | Description     | Arduino Pin | Sx1262 Pin |
+# +-----------------+-------------+------------+
+# | Power (3v3)     | 3v3         | 3v3        |
+# | GND             | GND         | GND        |
+# | Radio Reset     | A0          | SX_NRESET  |
+# | Busy (optional) | D3          | BUSY       |
+# | Radio Interrupt | D5          | DIO1       |
+# | SPI SCK         | 13          | SCK        |
+# | SPI MOSI        | D11         | MOSI       |
+# | SPI MISO        | D12         | MISO       |
+# | SPI CS          | D7          | NSS        |
+# +-----------------+----------+------------+
+*/
+
+//Pin configurations (for Arduino UNO)
+#define SX1262_NSS   7
+#define SX1262_RESET A0
+#define SX1262_DIO1  5
+
+//Presets. These help make radio config easier
+#define PRESET_DEFAULT    0
+#define PRESET_LONGRANGE  1
+#define PRESET_FAST       2
+
+class LoraSx1262 {
+  public:
+    bool begin();
+    bool sanityCheck(); /*Returns true if we have an active SPI communication with the radio*/
+    void transmit(byte* data, int dataLen);
+    int lora_receive_async(byte* buff, int buffMaxLen); /*Checks to see if a lora packet was received yet, returns the packet if available*/
+    int lora_receive_blocking(byte* buff, int buffMaxLen, uint32_t timeout); /*Waits until a packet is received, with an optional timeout*/
+
+    //Radio configuration (optional)
+    bool configSetPreset(int preset);
+    bool configSetFrequency(long frequencyInHz);
+    bool configSetBandwidth(int bandwidth);
+    bool configSetCodingRate(int codingRate);
+    bool configSetSpreadingFactor(int spreadingFactor);
+    
+    //These variables show signal quality, and are updated automatically whenever a packet is received
+    int rssi = 0;
+    int snr = 0;
+    int signalRssi = 0;
+
+    uint32_t frequencyToPLL(long freqInHz);
+
+  private:
+    void setModeReceive();  //Puts the radio in receive mode, allowing it to receive packets
+    void configureRadioEssentials();
+    bool waitForRadioCommandCompletion(uint32_t timeout);
+    void updateRadioFrequency();
+    void updateModulationParameters();
+    bool inReceiveMode = false;
+    uint8_t spiBuff[32];   //Buffer for sending SPI commands to radio
+
+    //Config variables (set to PRESET_DEFAULT on init)
+    uint32_t pllFrequency;
+    uint8_t bandwidth;
+    uint8_t codingRate;
+    uint8_t spreadingFactor;
+    uint8_t lowDataRateOptimize;
+    uint32_t transmitTimeout; //Worst-case transmit time depends on some factors
+};
+
+#endif
+

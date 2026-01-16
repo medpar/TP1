@@ -1,5 +1,19 @@
 uint8_t tramaGPS[1000];
 
+static int uart1_getch_timeout(uint32_t timeout_ms, char *out)
+{
+	uint32_t start = TIMER;
+	uint32_t ticks = (CCLK / 1000u) * timeout_ms;
+
+	while ((UART1STA & 1) == 0) {
+		if ((uint32_t)(TIMER - start) > ticks) {
+			return 0;
+		}
+	}
+	*out = (char)UART1DAT;
+	return 1;
+}
+
 uint8_t _getch1()
 {
 	while((UART1STA&1)==0);
@@ -12,16 +26,25 @@ void readGPS(){
 	char idAux[7];
 	int i=0;
 	int j, a; 
-	char idSearch[] = {'$','G','N','G','G','A'}; //Entrada buscada
+	char idSearch[] = "$GNGGA"; // Entrada buscada
+	uint32_t start = TIMER;
+	uint32_t timeout_ticks = (CCLK / 1000u) * 2000u;
 		 
 	while(1){
-		buffer = _getch1(); //Recojo char de la UART1	
+		if (!uart1_getch_timeout(2000u, &buffer)) {
+			_printf("\nGPS sin datos");
+			return;
+		}
+		// Recojo char de la UART1	
 		if(buffer == '$'){ //Indica inicio trama
 		
 			cadenaUart[0] ='$';
 			idAux[0] = '$';
 			for (i = 1; i < 80; i++){
-				cadenaUart[i] = _getch1();
+				if (!uart1_getch_timeout(2000u, &cadenaUart[i])) {
+					_printf("\nGPS sin datos");
+					return;
+				}
 				if(cadenaUart[i] == '\n'){
 					cadenaUart[i] = '\0';
 					break; //Llegamos al final de una trama
@@ -42,6 +65,10 @@ void readGPS(){
 			_printf("\nNo se ha encontrado la trama buscada");
 			
 		}	
+		if ((uint32_t)(TIMER - start) > timeout_ticks) {
+			_printf("\nGPS sin datos");
+			return;
+		}
 	} 
 	_printf("\nLa trama total recibida es: %s", cadenaUart);
 	procesaCadena(cadenaUart, ',' ); 
