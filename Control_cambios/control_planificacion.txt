@@ -37,3 +37,9 @@
 16/01/26
 -[Actualizado] Diagrama de Gantt
 -[Actualizado] Diario de trabajo
+23/01/26
+-[Actualizado] Diagrama de Gantt
+-[Actualizado] Diario de trabajo
+30/01/26
+-[Actualizado] Diagrama de Gantt
+-[Actualizado] Diario de trabajo

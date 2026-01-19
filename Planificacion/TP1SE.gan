@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-11-09" view-index="0" gantt-divider-location="423" resource-divider-location="300" version="2.8.11" locale="es">
+<?xml version="1.0" encoding="UTF-8"?><project name="Untitled Gantt Project" company="" webLink="http://" view-date="2025-12-28" view-index="0" gantt-divider-location="423" resource-divider-location="300" version="2.8.11" locale="es">
     <description/>
     <view zooming-state="default:6" id="gantt-chart">
         <field id="tpd3" name="Nombre" width="278" order="0"/>
@@ -35,7 +35,7 @@
             <taskproperty id="tpd8" name="coordinator" type="default" valuetype="text"/>
             <taskproperty id="tpd9" name="predecessorsr" type="default" valuetype="text"/>
         </taskproperties>
-        <task id="22" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="71" expand="true">
+        <task id="22" name="TP1:SE" color="#00ffff" meeting="false" start="2025-09-15" duration="105" complete="88" expand="true">
             <task id="0" name="Especificación del proyecto" meeting="false" start="2025-09-15" duration="8" complete="100" priority="3" expand="false">
                 <depend id="102" type="1" difference="0" hardness="Strong"/>
                 <task id="2" name="Definción de objetivos" meeting="false" start="2025-09-15" duration="4" complete="100" expand="true">
@@ -328,43 +328,43 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
                 <task id="84" name="Montaje de componentes" color="#8cb6ce" meeting="false" start="2025-11-17" duration="6" complete="100" thirdDate="2025-11-17" thirdDate-constraint="0" expand="true"/>
             </task>
             <task id="111" name="ENTREGA 9 SEMANA" color="#cc00cc" meeting="true" start="2025-11-21" duration="0" complete="100" expand="true"/>
-            <task id="85" name="Realización Hardware FPGA." meeting="false" start="2025-11-21" duration="15" complete="56" expand="true">
-                <task id="86" name="Core: LarVA." color="#8cb6ce" meeting="false" start="2025-11-21" duration="5" complete="80" thirdDate="2025-11-21" thirdDate-constraint="0" expand="true">
+            <task id="85" name="Realización Hardware FPGA." meeting="false" start="2025-11-21" duration="15" complete="100" expand="false">
+                <task id="86" name="Core: LarVA." color="#8cb6ce" meeting="false" start="2025-11-21" duration="5" complete="100" thirdDate="2025-11-21" thirdDate-constraint="0" expand="true">
                     <depend id="87" type="1" difference="0" hardness="Strong"/>
                     <depend id="88" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="87" name="Periféricos: UART0/1/2, SPI0/1, Temporizador, GPOut, GPIn,.." color="#8cb6ce" meeting="false" start="2025-11-21" duration="7" complete="80" thirdDate="2025-11-21" thirdDate-constraint="0" expand="true">
+                <task id="87" name="Periféricos: UART0/1/2, SPI0/1, Temporizador, GPOut, GPIn,.." color="#8cb6ce" meeting="false" start="2025-11-21" duration="7" complete="100" thirdDate="2025-11-21" thirdDate-constraint="0" expand="true">
                     <depend id="88" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="88" name="Simulación" color="#8cb6ce" meeting="false" start="2025-12-02" duration="8" complete="20" thirdDate="2025-12-02" thirdDate-constraint="0" expand="true">
+                <task id="88" name="Simulación" color="#8cb6ce" meeting="false" start="2025-12-02" duration="8" complete="100" thirdDate="2025-12-02" thirdDate-constraint="0" expand="true">
                     <depend id="90" type="2" difference="0" hardness="Strong"/>
                     <depend id="95" type="2" difference="0" hardness="Strong"/>
                 </task>
             </task>
             <task id="112" name="ENTREGA 10 SEMANA" color="#cc00cc" meeting="true" start="2025-11-28" duration="0" complete="100" thirdDate="2025-11-28" thirdDate-constraint="0" expand="true"/>
             <task id="113" name="ENTREGA 11 SEMANA" color="#cc00cc" meeting="true" start="2025-12-05" duration="0" complete="100" thirdDate="2025-12-05" thirdDate-constraint="0" expand="true"/>
-            <task id="89" name="Realización Firmware. Simulación y depuración" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true">
-                <task id="90" name="Control de elementos hardware: drivers" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true">
+            <task id="89" name="Realización Firmware. Simulación y depuración" meeting="false" start="2025-12-12" duration="14" complete="100" expand="false">
+                <task id="90" name="Control de elementos hardware: drivers" color="#8cb6ce" meeting="false" start="2025-12-12" duration="14" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true">
                     <depend id="91" type="1" difference="0" hardness="Strong"/>
                     <depend id="92" type="1" difference="0" hardness="Strong"/>
                     <depend id="93" type="1" difference="0" hardness="Strong"/>
                 </task>
-                <task id="91" name="Verificación " meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
-                <task id="92" name="Programa principal. Especificaciones" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
-                <task id="93" name="Documentación firmware. Control de cambios" meeting="false" start="2025-12-12" duration="14" complete="0" expand="true"/>
+                <task id="91" name="Verificación " color="#8cb6ce" meeting="false" start="2025-12-12" duration="14" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true"/>
+                <task id="92" name="Programa principal. Especificaciones" color="#8cb6ce" meeting="false" start="2025-12-12" duration="14" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true"/>
+                <task id="93" name="Documentación firmware. Control de cambios" color="#8cb6ce" meeting="false" start="2025-12-12" duration="14" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true"/>
             </task>
-            <task id="94" name="Verificación hardware" meeting="false" start="2025-12-12" duration="40" complete="0" expand="true">
-                <task id="95" name="Verificación inicial" meeting="false" start="2025-12-12" duration="20" complete="0" expand="true">
+            <task id="94" name="Verificación hardware" color="#000000" meeting="false" start="2025-12-12" duration="40" complete="90" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true">
+                <task id="95" name="Verificación inicial" color="#8cb6ce" meeting="false" start="2025-12-12" duration="20" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true">
                     <depend id="96" type="1" difference="0" hardness="Strong"/>
                     <depend id="97" type="1" difference="0" hardness="Strong"/>
                     <depend id="98" type="1" difference="0" hardness="Strong"/>
                 </task>
-                <task id="96" name="Verificación firmware" meeting="false" start="2025-12-12" duration="20" complete="0" expand="true"/>
-                <task id="97" name="Resolución de problemas" meeting="false" start="2025-12-12" duration="20" complete="0" expand="true"/>
-                <task id="98" name="Análisis de prestaciones" meeting="false" start="2025-12-12" duration="20" complete="0" expand="true">
+                <task id="96" name="Verificación firmware" color="#8cb6ce" meeting="false" start="2025-12-12" duration="20" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true"/>
+                <task id="97" name="Resolución de problemas" color="#8cb6ce" meeting="false" start="2025-12-12" duration="20" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true"/>
+                <task id="98" name="Análisis de prestaciones" color="#8cb6ce" meeting="false" start="2025-12-12" duration="20" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true">
                     <depend id="99" type="2" difference="0" hardness="Strong"/>
                 </task>
-                <task id="99" name="Montaje final. Piezas mecánicas" meeting="false" start="2026-01-09" duration="10" complete="0" expand="true">
+                <task id="99" name="Montaje final. Piezas mecánicas" color="#8cb6ce" meeting="false" start="2026-01-09" duration="10" complete="100" thirdDate="2026-01-09" thirdDate-constraint="0" expand="true">
                     <depend id="100" type="2" difference="0" hardness="Strong"/>
                 </task>
                 <task id="100" name="Pruebas de campo" meeting="false" start="2026-01-23" duration="10" complete="0" expand="true"/>
@@ -372,12 +372,11 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
             <task id="114" name="ENTREGA 12 SEMANA" color="#cc00cc" meeting="true" start="2025-12-12" duration="0" complete="100" thirdDate="2025-12-12" thirdDate-constraint="0" expand="true"/>
             <task id="115" name="ENTREGA 13 SEMANA" color="#cc00cc" meeting="true" start="2025-12-19" duration="0" complete="100" thirdDate="2025-12-19" thirdDate-constraint="0" expand="true"/>
             <task id="116" name="ENTREGA 14 SEMANA" color="#cc00cc" meeting="true" start="2026-01-09" duration="0" complete="100" thirdDate="2026-01-09" thirdDate-constraint="0" expand="true"/>
-            <task id="117" name="ENTREGA 15 SEMANA" color="#cc00cc" meeting="true" start="2026-01-16" duration="0" complete="0" expand="true"/>
-            <task id="118" name="ENTREGA 16 SEMANA" color="#cc00cc" meeting="true" start="2026-01-21" duration="0" complete="0" expand="true"/>
+            <task id="117" name="ENTREGA 15 SEMANA" color="#cc00cc" meeting="true" start="2026-01-16" duration="0" complete="100" thirdDate="2026-01-16" thirdDate-constraint="0" expand="true"/>
             <task id="101" name="Documentación" meeting="false" start="2025-09-15" duration="105" complete="70" expand="true">
                 <task id="102" name="Realización informe" color="#8cb6ce" meeting="false" start="2025-09-15" duration="105" complete="70" thirdDate="2025-09-15" thirdDate-constraint="0" expand="true"/>
             </task>
-            <task id="119" name="ENTREGA FINAL" color="#cc00cc" meeting="true" start="2026-02-06" duration="0" complete="0" expand="true"/>
+            <task id="119" name="ENTREGA FINAL" color="#cc00cc" meeting="true" start="2026-02-06" duration="0" complete="0" thirdDate="2026-02-06" thirdDate-constraint="0" expand="true"/>
         </task>
     </tasks>
     <resources>
@@ -430,7 +429,6 @@ Control de cambios, indicar semana a semana lo que se va haciendo]]></notes>
         <allocation task-id="106" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="110" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="114" resource-id="3" function="1" responsible="true" load="100.0"/>
-        <allocation task-id="118" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="119" resource-id="3" function="1" responsible="true" load="100.0"/>
         <allocation task-id="120" resource-id="3" function="1" responsible="false" load="100.0"/>
         <allocation task-id="121" resource-id="3" function="1" responsible="false" load="100.0"/>
