@@ -9,8 +9,11 @@
 - [Añadidos y actualizados] los ficheros main, system y los ficheros firmware
 19/01/2026
 -[actualizado] ficheros main con menú y ficheros de firmware para incorporar sensores.
-23/01/2026 
+20/01/2026 
+-[actualizado] ficheros  definitivos de main y ficheros de firmware para incorporar sensores.
+30/01/2026
 -[actualizado] ficheros  definitivos de main con menú y ficheros de firmware para incorporar sensores.
+
 
 
 
