@@ -1,11 +1,11 @@
-/*
-	putchar is the only external dependency for this file,
-	if you have a working putchar, leave it commented out.
-	If not, uncomment the define below and
-	replace outbyte(c) by your own function call.
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
 
-#define putchar(c) outbyte(c)
-*/
+// Funciones para imprimir texto en la pantalla
 
 #include <stdarg.h>
 
@@ -53,7 +53,6 @@ static int prints(char **out, const char *string, int width, int pad)
 	return pc;
 }
 
-/* the following should be enough for 32 bit int */
 #define PRINT_BUF_LEN 12
 
 static int printi(char **out, int i, int b, int sg, int width, int pad, int letbase)
@@ -145,7 +144,6 @@ static int print(char **out, const char *format, va_list args )
 				continue;
 			}
 			if( *format == 'c' ) {
-				/* char are converted to int then pushed on the stack */
 				scr[0] = (char)va_arg( args, int );
 				scr[1] = '\0';
 				pc += prints (out, scr, width, pad);

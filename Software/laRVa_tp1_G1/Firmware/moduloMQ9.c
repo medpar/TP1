@@ -1,51 +1,58 @@
-#include <stdint.h>
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
 
+#include <stdint.h>
 #include "moduloMCP3004.h"
 #include "moduloMQ9.h"
 
 extern int _printf(const char *format, ...);
 
-#define MQ9_ADC_BITS 1024
-#define MQ9_ADC_SCALE 330
-#define MQ9_CO_DIV 7
-#define MQ9_CH4_DIV 1
-
-static int mq9_scale_adc(int raw)
+// Convierte lectura ADC (0..1023) a escala intermedia (mV aprox)
+static int adc_a_ppm(int raw)
 {
-	return (raw * MQ9_ADC_SCALE) / MQ9_ADC_BITS;
+	return (raw * MQ9_ADC_ESCALA) / MQ9_ADC_BITS;
 }
 
-static int mq9_ppm_from_scaled(int scaled, int div)
+static int mq9_ppm_from_scaled(int escalado, int div)
 {
 	if (div == 0) return 0;
-	return (10 * scaled) / div;
+	// Ajuste por divisor específico de cada gas
+	return (10 * escalado) / div;
 }
 
-int MQ9_ReadCOppm(uint8_t channel)
+int lee_MQ9_CO(uint8_t canal)
 {
-	int raw = MCP3004_Read(channel);
-	int scaled = mq9_scale_adc(raw);
-	return mq9_ppm_from_scaled(scaled, MQ9_CO_DIV);
+	// Lectura del canal y conversion a ppm para CO
+	int raw = lee_MCP(canal);
+	int escalado = adc_a_ppm(raw);
+	return mq9_ppm_from_scaled(escalado, MQ9_CO_DIV);
 }
 
-int MQ9_ReadCH4ppm(uint8_t channel)
+int lee_MQ9_CH4(uint8_t canal)
 {
-	int raw = MCP3004_Read(channel);
-	int scaled = mq9_scale_adc(raw);
-	return mq9_ppm_from_scaled(scaled, MQ9_CH4_DIV);
+	// Lectura del canal y conversion a ppm para CH4
+	int raw = lee_MCP(canal);
+	int escalado = adc_a_ppm(raw);
+	return mq9_ppm_from_scaled(escalado, MQ9_CH4_DIV);
 }
 
-void readGas(void)
+void lee_gas(void)
 {
-	state = 0;
+	// Arranca la fase de calentamiento del sensor
+	estado = 0;
 	ENABLE_5V;
 	IRQEN |= IRQ_TIMER;
 	MAX_COUNT = 1 * 1000000;
 }
 
-void readCO(void)
+void lee_CO(void)
 {
-	int read_CO = MQ9_ReadCOppm(MCP3004_CH0);
+	// Mide CO y configura el siguiente intervalo de espera
+	int read_CO = lee_MQ9_CO(MCP3004_CH0);
 
 	DISABLE_5V_1V4;
 	ENABLE_1V4;
@@ -53,20 +60,21 @@ void readCO(void)
 	IRQEN |= IRQ_TIMER;
 	MAX_COUNT = 1 * 1000000;
 
-	state = 1;
+	estado = 1;
 
-	_printf("Medicion de CO en curso, por favor espere 60 seg.\n");
-	_printf("Lectura CO: %d ppm \n", read_CO);
-	_printf("Medicion de CH4 en curso, por favor espere 90 seg.\n");
+	_printf("Midiendo CO, esperar 60 segundos...\n");
+	_printf("CO medido: %d ppm \n", read_CO);
 }
 
-void readCH4(void)
+void lee_CH4(void)
 {
-	int read_CH4 = MQ9_ReadCH4ppm(MCP3004_CH0);
+	// Mide CH4 y finaliza la secuencia
+	int read_CH4 = lee_MQ9_CH4(MCP3004_CH0);
 
 	DISABLE_5V_1V4;
 
-	state = 2;
+	estado = 2;
 
-	_printf("Lectura CH4: %d ppm \n", read_CH4);
+	_printf("Midiendo CH4, esperar 90 segundos...\n");
+	_printf("CH4 medido: %d ppm \n", read_CH4);
 }

@@ -1,22 +1,30 @@
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:													//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
+
 #pragma once
 
 #include <stdint.h>
 
-#define ADC_CS 0b01
+// Seleccion de chip para el ADC MCP3004
+#define MCP_CS 0b01
 
-#define MCP3004_CHANNELS 4
-#define MCP3004_MAX_VALUE 1023
+#define MCP_CANALES 4
+#define MCP_MAXIMO 1023
 
-#define MCP3004_CH0 0
-#define MCP3004_CH1 1
-#define MCP3004_CH2 2
-#define MCP3004_CH3 3
+// Canales del MCP3004
+#define MCP_0 0
+#define MCP_1 1
+#define MCP_2 2
+#define MCP_3 3
 
-uint8_t spixfer(uint8_t d);
+uint8_t spi_transf(uint8_t d);
 
-int MCP3004_Read(uint8_t channel);
-int MCP3004_DifferentialRead(uint8_t channel);
-void MCP3004_ReadMultiple(const uint8_t *channels, uint8_t numChannels, int *readings);
-int MCP3004_Read_Reg(unsigned char channel);
-
-int readMCP3004(unsigned char channel);
+// Lecturas del ADC
+int lee_MCP(uint8_t canal);
+int lee_MCP_diferencial(uint8_t canal);
+void lee_MCP_multiple(const uint8_t *canales, uint8_t numCanales, int *readings);
+int lee_MCP_reg(unsigned char canal);

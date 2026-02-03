@@ -1,9 +1,17 @@
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
+
 #include <stdint.h>
 #include <stddef.h>
 
 extern int _printf(const char *format, ...);
 
-static void copy_field(char *dst, int dst_len, const char *src)
+// Copia segura de cadenas con terminador nulo
+static void copia_strings(char *dst, int dst_len, const char *src)
 {
 	if (dst == NULL || dst_len <= 0 || src == NULL) return;
 	int i;
@@ -13,11 +21,13 @@ static void copy_field(char *dst, int dst_len, const char *src)
 	dst[i] = '\0';
 }
 
+// Espera un byte en UART1 con timeout
 static int uart1_getch_timeout(uint32_t timeout_ms, char *out)
 {
 	uint32_t start = TIMER;
 	uint32_t ticks = (CCLK / 1000u) * timeout_ms;
 
+	// Espera un byte en UART1 con timeout
 	while ((UART1STA & 1) == 0) {
 		if ((uint32_t)(TIMER - start) > ticks) return 0;
 	}
@@ -25,7 +35,8 @@ static int uart1_getch_timeout(uint32_t timeout_ms, char *out)
 	return 1;
 }
 
-static int str_starts_with(const char *s, const char *prefix)
+// Verifica si una cadena comienza con un prefijo
+static int prefijo_strings(const char *s, const char *prefix)
 {
 	while (*prefix && *s && *s == *prefix) {
 		++s;
@@ -34,7 +45,8 @@ static int str_starts_with(const char *s, const char *prefix)
 	return *prefix == '\0';
 }
 
-static char *next_token(char **ctx)
+// Extrae el siguiente token de una cadena separado por comas
+static char *siguiente_token(char **ctx)
 {
 	char *p = *ctx;
 	if (p == NULL) return NULL;
@@ -49,35 +61,39 @@ static char *next_token(char **ctx)
 	return start;
 }
 
-static int parse_gga(char *line, char *lat, int lat_len, char *lon, int lon_len, char *lat_dir, char *lon_dir)
+// Analiza una trama GGA y extrae lat/lon
+static int procesa_gga(char *line, char *lat, int lat_len, char *lon, int lon_len, char *lat_dir, char *lon_dir)
 {
-	if (!(str_starts_with(line, "$GNGGA") || str_starts_with(line, "$GPGGA"))) {
+	// Acepta tramas GGA y extrae lat/lon en formato NMEA
+	if (!(prefijo_strings(line, "$GNGGA") || prefijo_strings(line, "$GPGGA"))) {
 		return 0;
 	}
 
 	char *ctx = line;
-	(void)next_token(&ctx);           // $GNGGA
-	char *utc   = next_token(&ctx);   // hhmmss (unused here)
+	(void)siguiente_token(&ctx);           // $GNGGA
+	char *utc   = siguiente_token(&ctx);   // hhmmss
 	(void)utc;
-	char *lat_f   = next_token(&ctx);   // latitude
-	char *lat_d   = next_token(&ctx);   // N/S
-	char *lon_f   = next_token(&ctx);   // longitude
-	char *lon_d   = next_token(&ctx);   // E/W
+	char *lat_f   = siguiente_token(&ctx);   // latitud
+	char *lat_d   = siguiente_token(&ctx);   // N/S
+	char *lon_f   = siguiente_token(&ctx);   // longitud
+	char *lon_d   = siguiente_token(&ctx);   // E/W
 
 	if (!lat_f || !lat_d || !lon_f || !lon_d) {
 		return 0;
 	}
 
-	if (lat && lat_len > 0) copy_field(lat, lat_len, lat_f);
-	if (lon && lon_len > 0) copy_field(lon, lon_len, lon_f);
+	if (lat && lat_len > 0) copia_strings(lat, lat_len, lat_f);
+	if (lon && lon_len > 0) copia_strings(lon, lon_len, lon_f);
 	if (lat_dir) *lat_dir = lat_d[0];
 	if (lon_dir) *lon_dir = lon_d[0];
 	return 1;
 }
 
-static int read_nmea_line(char *line, int line_len)
+// Lee una linea NMEA desde UART1
+static int lee_nmea(char *line, int line_len)
 {
 	char c;
+	// Sincroniza con '$' y lee hasta fin de linea o timeout
 	if (!uart1_getch_timeout(200u, &c)) return 0;
 	if (c != '$') return 0;
 
@@ -92,7 +108,8 @@ static int read_nmea_line(char *line, int line_len)
 	return 1;
 }
 
-static int nmea_to_microdeg(const char *nmea, char dir, int *out_micro)
+// Convierte ddmm.mmmm a microgrados (1e-6)
+static int nmea_a_udeg(const char *nmea, char dir, int *out_micro)
 {
 	if (!nmea || !out_micro || nmea[0] == '\0') return 0;
 
@@ -128,24 +145,29 @@ static int nmea_to_microdeg(const char *nmea, char dir, int *out_micro)
 	return 1;
 }
 
-int GPS_ReadLatLon(char *lat, int lat_len, char *lon, int lon_len)
+
+// Lee la latitud y longitud desde UART1
+int GPS_lee_latlon(char *lat, int lat_len, char *lon, int lon_len)
 {
 	char line[128];
 	uint32_t start_all = TIMER;
 	uint32_t timeout_all = (CCLK / 1000u) * 1500u; // 1.5s
 
+	// Busca una GGA valida dentro del tiempo limite
 	while ((uint32_t)(TIMER - start_all) < timeout_all) {
-		if (!read_nmea_line(line, (int)sizeof(line))) continue;
+		if (!lee_nmea(line, (int)sizeof(line))) continue;
 		char work[128];
-		copy_field(work, (int)sizeof(work), line);
-		if (parse_gga(work, lat, lat_len, lon, lon_len, NULL, NULL)) {
+		copia_strings(work, (int)sizeof(work), line);
+		if (procesa_gga(work, lat, lat_len, lon, lon_len, NULL, NULL)) {
 			return 1;
 		}
 	}
 	return 0;
 }
 
-int GPS_ReadLatLonMicro(int *lat_micro, int *lon_micro)
+
+// Lee la latitud y longitud desde UART1 en microgrados
+int GPS_lee_latlon_micro(int *lat_micro, int *lon_micro)
 {
 	char line[128];
 	char lat[24] = {0};
@@ -155,13 +177,14 @@ int GPS_ReadLatLonMicro(int *lat_micro, int *lon_micro)
 	uint32_t start_all = TIMER;
 	uint32_t timeout_all = (CCLK / 1000u) * 1500u; // 1.5s
 
+	// Igual que GPS_lee_latlon pero devuelve en microgrados con signo
 	while ((uint32_t)(TIMER - start_all) < timeout_all) {
-		if (!read_nmea_line(line, (int)sizeof(line))) continue;
+		if (!lee_nmea(line, (int)sizeof(line))) continue;
 		char work[128];
-		copy_field(work, (int)sizeof(work), line);
-		if (parse_gga(work, lat, (int)sizeof(lat), lon, (int)sizeof(lon), &lat_dir, &lon_dir)) {
-			if (nmea_to_microdeg(lat, lat_dir, lat_micro) &&
-			    nmea_to_microdeg(lon, lon_dir, lon_micro)) {
+		copia_strings(work, (int)sizeof(work), line);
+		if (procesa_gga(work, lat, (int)sizeof(lat), lon, (int)sizeof(lon), &lat_dir, &lon_dir)) {
+			if (nmea_a_udeg(lat, lat_dir, lat_micro) &&
+			    nmea_a_udeg(lon, lon_dir, lon_micro)) {
 				return 1;
 			}
 		}
@@ -169,7 +192,8 @@ int GPS_ReadLatLonMicro(int *lat_micro, int *lon_micro)
 	return 0;
 }
 
-void readGPS(void)
+// Lee la latitud y longitud desde UART1 y la imprime
+void lee_GPS(void)
 {
 	char line[128];
 	char lat[24] = {0};
@@ -182,22 +206,23 @@ void readGPS(void)
 	uint32_t start_all = TIMER;
 	uint32_t timeout_all = (CCLK / 1000u) * 3000u; // 3s
 
+	// Imprime tramas y, si hay GGA valida, muestra lat/lon
 	while ((uint32_t)(TIMER - start_all) < timeout_all) {
-		if (!read_nmea_line(line, (int)sizeof(line))) continue;
+		if (!lee_nmea(line, (int)sizeof(line))) continue;
 
 		// Imprime la trama en su propia linea (evita solapes)
 		_printf("%s\n", line);
 		// Analiza lat/lon si es una GGA
 		char work[128];
-		copy_field(work, (int)sizeof(work), line);
-		parse_gga(work, lat, (int)sizeof(lat), lon, (int)sizeof(lon), &lat_dir, &lon_dir);
+		copia_strings(work, (int)sizeof(work), line);
+		procesa_gga(work, lat, (int)sizeof(lat), lon, (int)sizeof(lon), &lat_dir, &lon_dir);
 	}
 
 	if (lat[0] && lon[0]) {
 		_printf("Lat: %s %c\n", lat, lat_dir);
 		_printf("Lon: %s %c\n", lon, lon_dir);
-		if (nmea_to_microdeg(lat, lat_dir, &lat_micro) &&
-		    nmea_to_microdeg(lon, lon_dir, &lon_micro)) {
+		if (nmea_a_udeg(lat, lat_dir, &lat_micro) &&
+		    nmea_a_udeg(lon, lon_dir, &lon_micro)) {
 			int lat_abs = (lat_micro < 0) ? -lat_micro : lat_micro;
 			int lon_abs = (lon_micro < 0) ? -lon_micro : lon_micro;
 			_printf("Lat dec: %d.%06d\n", lat_micro/1000000, lat_abs%1000000);
@@ -205,6 +230,6 @@ void readGPS(void)
 			//_printf("Coordenadas decimales: %d, %d\n", lat_micro/1000000, lon_micro/1000000);
 		}
 	} else {
-		_printf("GPS: sin datos GGA validos\n");
+		_printf("GPS: No hay datos GGA validos\n");
 	}
 }

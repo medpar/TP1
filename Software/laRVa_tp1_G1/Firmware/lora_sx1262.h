@@ -1,3 +1,11 @@
+//--------------------------------------------------------------------------
+// Taller de Proyectos 1
+// Master de Ingeniería de Telecomunicaciones
+// E.T.S.I.Telecomunicaciones, Universidad de Valladolid
+// Jesús M. Hernández Mangas
+// Curso 2025-2026
+// -------------------------------------------------------------------------
+
 #ifndef SX1262_H
 #define SX1262_H
 #include <stdint.h>

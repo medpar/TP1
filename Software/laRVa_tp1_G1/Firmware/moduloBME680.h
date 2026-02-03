@@ -1,10 +1,18 @@
-#define CS_BME680 0b10
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
 
-#define STATUS_BME 0x73
-#define RESET_BME 0xE0
-#define ID_BME 0xD0
+// Definicion de los registros del BME680
 
-#define Config_BME 0x75
+#define BME_CS 0b10
+#define BME_RESET 0xE0
+#define BME_ESTADO 0x73
+#define BME_ID 0xD0
+#define BME_CONFIG 0x75
+
 #define CTRL_MEAS 0x74
 #define CTRL_HUM 0x72
 #define CTRL_GAS_1 0x71
@@ -32,9 +40,9 @@
 #define res_heat8 0x62
 #define res_heat9 0x63
 
-void startBME680();
-void writeBME680(char data,char dir);
-char readBME680(char dir);
-int returnTemp();
-int returnPressure();
-int returnHUMIDITY(int temp_comp);
+void inicia_BME();
+void escribe_BME(char data,char dir);
+char lee_BME(char dir);
+int devuelve_temp();
+int devuelve_pres();
+int devuelve_hum(int temp_comp);

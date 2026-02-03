@@ -26,3 +26,6 @@
 **/Project\ Backups/
 *.workspace
 **/tools/
+
+# Host_debug
+*host_debug*

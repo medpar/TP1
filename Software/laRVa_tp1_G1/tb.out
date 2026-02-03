@@ -1786,12 +1786,12 @@ S_0000015f52cbf870 .scope module, "timer" "TIMER" 3 472, 6 3 0, S_0000015f52cc15
     .port_info 1 /INPUT 32 "maxcount";
     .port_info 2 /INPUT 1 "rd";
     .port_info 3 /INPUT 1 "wr";
-    .port_info 4 /OUTPUT 1 "flagtimer";
+    .port_info 4 /OUTPUT 1 "flag_temp";
     .port_info 5 /OUTPUT 32 "contador";
 v0000015f52ef9530_0 .var "aux", 31 0;
 v0000015f52efaf70_0 .net "clk", 0 0, L_0000015f52e604d0;  alias, 1 drivers
 v0000015f52efb330_0 .var "contador", 31 0;
-v0000015f52efb470_0 .var "flagtimer", 0 0;
+v0000015f52efb470_0 .var "flag_temp", 0 0;
 v0000015f52efb790_0 .net "maxcount", 31 0, L_0000015f52e8fe90;  alias, 1 drivers
 v0000015f52efb830_0 .net "rd", 0 0, L_0000015f52f5c350;  alias, 1 drivers
 v0000015f52efba10_0 .net "wr", 0 0, L_0000015f52f5c2e0;  alias, 1 drivers

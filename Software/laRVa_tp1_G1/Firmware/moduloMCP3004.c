@@ -1,47 +1,56 @@
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
+
 #include "moduloMCP3004.h"
 
-static int MCP3004_ReadADC(uint8_t channel, uint8_t single)
+// Funcion para leer el ADC MCP3004
+static int lee_MCP_ADC(uint8_t canal, uint8_t single)
 {
-	if (channel >= MCP3004_CHANNELS) return 0;
+	if (canal >= MCP_CANALES) return 0;
 
-	uint8_t data[3] = {0, 0, 0};
-	data[0] = 0x01;
-	data[1] = single ? 0x80 : 0x00;
-	data[1] |= (channel << 4);
+	// Envia comando de lectura por SPI (single o diferencial)
+	uint8_t datos[3] = {0, 0, 0};
+	datos[0] = 0x01;
+	datos[1] = single ? 0x80 : 0x00;
+	datos[1] |= (canal << 4);
 
-	SPISS = ADC_CS;
-	data[0] = spixfer(data[0]);
-	data[1] = spixfer(data[1]);
-	data[2] = spixfer(data[2]);
+	// Seleccion del ADC y transferencia SPI
+	SPISS = MCP_CS;
+	datos[0] = spi_transf(datos[0]);
+	datos[1] = spi_transf(datos[1]);
+	datos[2] = spi_transf(datos[2]);
 	SPISS = 0b11;
 
-	return ((data[1] << 8) | data[2]) & MCP3004_MAX_VALUE;
+	return ((datos[1] << 8) | datos[2]) & MCP_MAXIMO;
 }
 
-int MCP3004_Read(uint8_t channel)
+// Funcion para leer el ADC MCP3004 en modo single-ended
+int lee_MCP(uint8_t canal)
 {
-	return MCP3004_ReadADC(channel, 1);
+	return lee_MCP_ADC(canal, 1);
 }
 
-int MCP3004_DifferentialRead(uint8_t channel)
+// Funcion para leer el ADC MCP3004 en modo diferencial
+int lee_MCP_diferencial(uint8_t canal)
 {
-	return MCP3004_ReadADC(channel, 0);
+	return lee_MCP_ADC(canal, 0);
 }
 
-void MCP3004_ReadMultiple(const uint8_t *channels, uint8_t numChannels, int *readings)
+// Funcion para leer el ADC MCP3004 en modo multiple
+void lee_MCP_multiple(const uint8_t *canales, uint8_t numCanales, int *readings)
 {
 	uint8_t i;
-	for (i = 0; i < numChannels; i++) {
-		readings[i] = MCP3004_Read(channels[i]);
+	for (i = 0; i < numCanales; i++) {
+		readings[i] = lee_MCP(canales[i]);
 	}
 }
 
-int MCP3004_Read_Reg(unsigned char channel)
+// Funcion para leer el ADC MCP3004 en modo registro
+int lee_MCP_reg(unsigned char canal)
 {
-	return MCP3004_Read((uint8_t)channel);
-}
-
-int readMCP3004(unsigned char channel)
-{
-	return MCP3004_Read((uint8_t)channel);
+	return lee_MCP((uint8_t)canal);
 }

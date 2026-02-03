@@ -235,9 +235,6 @@ ram32 ram0 (
 
 
 
-// REVISAR ESTO TAMBIEN
-
-
 wire uart0cs;	// UART0	at offset 0x80
 wire uart1cs;	// UART1	at offset 0x90
 wire uart2cs;	// UART2	at offset 0xA0
@@ -295,9 +292,8 @@ always@*
 
 	default:  iodo <= 32'hxxxxxxxx;
 		
- endcase //comprobado !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ endcase
 
- //GPOUT Register CHANGED (revisar)
 always @(posedge clk) 
     begin 
         if (gpoutcs & mwe[0]) 
@@ -307,7 +303,7 @@ always @(posedge clk)
     end 
 
 /////////////////////////////
-// UART0 modificado CLAMIG
+// UART0 modificado 
 
 wire tend0,thre0,dv0,fe0,ove0; // UART0 Flags
 
@@ -373,10 +369,6 @@ UART_CORE #(.BAUDBITS(12)) uart2 ( .clk(cclk), .txd(txd_2), .rxd(rxd_2),
 	.dv(dv2), .fe(fe2), .ove(ove2), .tend(tend2), .thre(thre2) );
 	
 	
-//comprobado!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-
 
 /////////////////////////////    
 // SPI0
@@ -412,7 +404,6 @@ always @(posedge cclk or posedge reset)
   
 assign BME_CS = spi_ss[0]; 
 assign ADC_CS = spi_ss[1]; 
-// LORA_CS se conectará a SPI1 cuando esté implementado
 
 SPI_master spi0 (.clk(cclk), .miso(miso), .wr(spitx), .din(cdo),  
  .divider(spicontrol[7:0]), .bits(spicontrol[13:8]), .sck(sck), 
@@ -469,12 +460,8 @@ wire timerrd;
 assign timerwr = timercs & (mwe==4'b1111);  // Write MAX_COUNT at 0xE0000040
 assign timerrd = timercs & (mwe==4'b0000);   // Read TIMER at 0xE0000040
 
-TIMER timer (.clk(cclk), .maxcount(cdo[31:0]), .flagtimer(timer_irq), 
-.rd(timerrd), .wr(timerwr) , .contador(tcount[31:0])); 
-
-
-
-
+TIMER timer (.clk(cclk), .maximo(cdo[31:0]), .flag_temp(timer_irq), 
+.rd(timerrd), .wr(timerwr) , .cont(tcount[31:0])); 
 
 
 

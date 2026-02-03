@@ -2,9 +2,10 @@
 // Taller de Proyectos 1
 // Master de Ingeniería de Telecomunicaciones
 // E.T.S.I.Telecomunicaciones, Universidad de Valladolid
-// Jesús Arias Álvarez, Jesús M. Hernández Mangas
-// Curso 2022-2023
+// Jesús M. Hernández Mangas
+// Curso 2025-2026
 // -------------------------------------------------------------------------
+
 //Presets. These help make radio config easier
 #define PRESET_DEFAULT    0
 #define PRESET_LONGRANGE  1

@@ -1,8 +1,16 @@
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:													//	
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia				//
+//////////////////////////////////////////////////////////////////
+
 #pragma once
 
 #include <stdint.h>
 
-#define GP2Y1010_LED_ON_US 320u
-#define GP2Y1010_SAMPLE_US 280u
+// Tiempos de muestreo y apagado del sensor
+#define G2PY_US_LED 320u
+#define G2PY_US_MUESTREO 280u
 
-int GP2Y1010_ReadRaw(uint8_t channel);
+int lee_GP2Y(uint8_t canal);

@@ -1,4 +1,9 @@
-
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
 
 #include <stdint.h>
 
@@ -7,9 +12,9 @@
 #include "moduloBME680.h"
 #include "moduloTEL0132.h"
 #include "lora_sx1262.h"
-//#include "SPI.h"
 #include "moduloMCP3004.h"
 #include "moduloGP2Y1010.h"
+#include "SPI.h"
 
 // Tipos de datos
 typedef unsigned char  u8;
@@ -20,10 +25,10 @@ typedef signed char  s8;
 typedef signed short s16;
 typedef signed int   s32;
 
-volatile int state;  
+// Estado de la secuencia del sensor MQ9 (usado por el timer IRQ)
+volatile int estado;  
 
 
-//-- Registros mapeados
 // UART0
 #define UARTDAT  (*(volatile uint8_t*)0xE0000080)
 #define UARTSTA  (*(volatile uint32_t*)0xE0000084)
@@ -51,12 +56,11 @@ volatile int state;
 #define SPI1STA	 (*(volatile uint32_t*)0xE0000064)
 #define SPI1SS	 (*(volatile uint32_t*)0xE0000068)
 
-
 // TIMER
 #define MAX_COUNT (*(volatile uint32_t*)0xE0000040)
 #define TIMER     (*(volatile uint32_t*)0xE0000040)
 
-
+// GPOUT
 #define GPOUT  (*(volatile uint32_t*)0xE0000030)
 #define GPIN   (*(volatile uint32_t*)0xE0000034)
 
@@ -74,6 +78,7 @@ volatile int state;
 
 #define SENSOR_POWER (EN_5V_UP | EN_5V_M4 | EN_1V4_M4)
 
+// Bits de interrupcion
 #define IRQ_TIMER     (1U << 1)
 #define IRQ_UART0_RX  (1U << 2)
 #define IRQ_UART0_TX  (1U << 3)
@@ -82,8 +87,7 @@ volatile int state;
 #define IRQ_UART2_RX  (1U << 6)
 #define IRQ_UART2_TX  (1U << 7)
 
-
-//IRQs vectors
+//Vectores de interrupcion
 #define IRQEN	 (*(volatile uint32_t*)0xE0000020) //Enable
 #define IRQVECT0 (*(volatile uint32_t*)0xE0000000) //Trap
 #define IRQVECT1 (*(volatile uint32_t*)0xE0000004) //Timer
@@ -94,9 +98,7 @@ volatile int state;
 #define IRQVECT6 (*(volatile uint32_t*)0xE0000018) //UART2 RX
 #define IRQVECT7 (*(volatile uint32_t*)0xE000001C) //UART2 TX
 
-
-
-void delay_loop(uint32_t val);	// (3 + 3*val) cyclesç
+void delay_loop(uint32_t val);
 
 #define CCLK (18000000u)
 #define _delay_us(n) delay_loop((n*(CCLK/1000)-3000)/3000)
@@ -127,22 +129,23 @@ uint8_t haschar() {return UARTSTA&1;}
 
 //FIFOs
 uint8_t udat0[32]; 				//FIFO UART0
-volatile uint8_t rdix0, wrix0; 	//Read index and write index
+volatile uint8_t rdix0, wrix0;
 
 uint8_t udat1[32]; 				//FIFO UART1
-volatile uint8_t rdix1, wrix1; 	//Read index and write index
+volatile uint8_t rdix1, wrix1;
 
 uint8_t udat2[32]; 				//FIFO UART2
-volatile uint8_t rdix2, wrix2; 	//Read index and write index	
+volatile uint8_t rdix2, wrix2;
 
+// Buffer para LoRa
 static uint8_t lora_rx_buffer[128];
 
-// Forward declarations for FIFO helpers
+// Funciones para comprobar si hay datos en los FIFOs
 uint8_t hascharUART0(void);
 uint8_t hascharUART1(void);
 uint8_t hascharUART2(void);
 
-//Read of UART0
+//Lectura de la UART0
 uint8_t _getchUART0()
 {
 	uint8_t d;
@@ -152,7 +155,7 @@ uint8_t _getchUART0()
 	return d;
 }
 
-//Read of UART1(moduloTEL0132)
+//Lectura de la UART1
 uint8_t _getchUART1()
 {
 	uint8_t d;
@@ -162,7 +165,7 @@ uint8_t _getchUART1()
 	return d;
 }
 
-//Read of UART2
+//Lectura de la UART2
 uint8_t _getchUART2()
 {
 	uint8_t d;
@@ -186,27 +189,29 @@ void *memcpy(void *dst, const void *src, unsigned int n)
 extern int _printf(const char *format, ...);
 extern int _sprintf(char *out, const char *format, ...);
 
-static void debug_sensors(void)
+// Funcion para debug de sensores
+static void debug_sensores(void)
 {
+	// Lectura completa de sensores y salida por UART
 	int temp_comp, press_comp, hum_comp;
 	int adc0, adc1, adc2, adc3;
 	int co_ppm, ch4_ppm;
 	int dust_raw;
 
-	startBME680();
-	temp_comp  = returnTemp();
-	press_comp = returnPressure();
-	hum_comp   = returnHUMIDITY(temp_comp);
+	inicia_BME();
+	temp_comp  = devuelve_temp();
+	press_comp = devuelve_pres();
+	hum_comp   = devuelve_hum(temp_comp);
 
-	adc0 = MCP3004_Read(MCP3004_CH0);
-	adc1 = MCP3004_Read(MCP3004_CH1);
-	adc2 = MCP3004_Read(MCP3004_CH2);
-	adc3 = MCP3004_Read(MCP3004_CH3);
+	adc0 = lee_MCP(MCP3004_CH0);
+	adc1 = lee_MCP(MCP3004_CH1);
+	adc2 = lee_MCP(MCP3004_CH2);
+	adc3 = lee_MCP(MCP3004_CH3);
 
-	co_ppm  = MQ9_ReadCOppm(MCP3004_CH0);
-	ch4_ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
+	co_ppm  = lee_MQ9_CO(MCP3004_CH0);
+	ch4_ppm = lee_MQ9_CH4(MCP3004_CH0);
 
-	dust_raw = GP2Y1010_ReadRaw(MCP3004_CH1);
+	dust_raw = lee_GP2Y(MCP3004_CH1);
 
 	_printf("\n------ DEBUG SENSORES ------\n");
 	_printf("BME680 T=%02d.%02d C, P=%d Pa, H=%02d.%03d %%\n",
@@ -217,10 +222,11 @@ static void debug_sensors(void)
 	_printf("MQ9 CO=%d ppm, CH4=%d ppm\n", co_ppm, ch4_ppm);
 	_printf("GP2Y1010 raw=%d\n", dust_raw);
 	_printf("----------------------------\n");
-	readGPS();
+	lee_GPS();
 }
 
-static void lora_stream_send(void)
+// Funcion para envio continuo de LoRa
+static void lora_continuo(void)
 {
 	int temp_comp, press_comp, hum_comp;
 	int lat_micro = 0;
@@ -234,9 +240,9 @@ static void lora_stream_send(void)
 		_printf("Error al iniciar el LoRa\n");
 		return;
 	}
-	SX1262_configSetFrequency(868000000);
-	SX1262_configSetBandwidth(4);      	  //125 kHz
-	SX1262_configSetSpreadingFactor(7);  //SF7
+	SX1262_configSetFrequency(868000000);	// 868 MHz
+	SX1262_configSetBandwidth(4);      	  	// 125 kHz
+	SX1262_configSetSpreadingFactor(7);  	// SF7
 
 	while (1) {
 		if (hascharUART0()) {
@@ -244,12 +250,13 @@ static void lora_stream_send(void)
 			_getchUART0();
 			break;
 		}
-		startBME680();
-		temp_comp  = returnTemp();
-		press_comp = returnPressure();
-		hum_comp   = returnHUMIDITY(temp_comp);
+		inicia_BME();
+		temp_comp  = devuelve_temp();
+		press_comp = devuelve_pres();
+		hum_comp   = devuelve_hum(temp_comp);
 
-		if (!GPS_ReadLatLonMicro(&lat_micro, &lon_micro)) {
+		// GPS en microgrados (si falla, deja 0)
+		if (!GPS_lee_latlon_micro(&lat_micro, &lon_micro)) {
 			lat_micro = 0;
 			lon_micro = 0;
 		}
@@ -285,7 +292,7 @@ static void lora_stream_send(void)
 #include "moduloMCP3004.c"
 #include "moduloGP2Y1010.c"
 
-
+// Menu principal y logo
 const static char *menu="\n" 
 "------------------ 	MENU  	  -----------------\n" 
 "--------------------------------------------------\n" 
@@ -332,18 +339,14 @@ const static char *logo="\n\n"
 "        	TP1 ELECTRONICS\n"
 "\n\n";
 
-// Cambios Clara y Miguel
-
+// Funciones para comprobar si hay datos en los FIFOs
 uint8_t hascharUART0(){return (wrix0 - rdix0) & 31;}
-// uint8_t hascharUART0(){return (wrix0 - rdix0) & 31;} // Opción que soluciona el problema de overflow
 
 uint8_t hascharUART1(){return (wrix1 - rdix1) & 31;}
-// uint8_t hascharUART1(){return (wrix1 - rdix1) & 31;} // Opción que soluciona el problema de overflow
 
 uint8_t hascharUART2(){return (wrix2 - rdix2) & 31;}
-// uint8_t hascharUART2(){return (wrix2 - rdix2) & 31;} // Opción que soluciona el problema de overflow
 
-
+// Funcion para obtener el PC de la interrupcion
 uint32_t __attribute__((naked)) getMEPC()
 {
 	asm volatile(
@@ -355,7 +358,7 @@ uint32_t __attribute__((naked)) getMEPC()
 	);
 }
 
-//Interruptions
+//Interrupciones
 void __attribute__((interrupt ("machine"))) irq0_handler()
 {
 	_printf("\nTRAP at 0x%x\n",getMEPC());
@@ -365,12 +368,12 @@ void __attribute__((interrupt ("machine"))) irq0_handler()
 void __attribute__((interrupt ("machine"))) irq1_handler()
 {
 	IRQEN &= ~IRQ_TIMER;
-	switch(state){
+	switch(estado){
 		case 0:
-			readCO();
+			lee_CO();
 			break;
 		case 1:
-			readCH4();
+			lee_CH4();
 			break;
 		case 2:
 			_printf("Medidas \n");
@@ -388,7 +391,6 @@ void __attribute__((interrupt ("machine"))) irq2_handler()
     wrix0 &= 31;
 }
 
-
 //UART0 TX
 void  __attribute__((interrupt ("machine"))) irq3_handler(){
 	static uint8_t a=32;
@@ -403,7 +405,6 @@ void __attribute__((interrupt ("machine"))) irq4_handler()
 	wrix1 &= 31;
 }
 
-
 //UART1 TX
 void  __attribute__((interrupt ("machine"))) irq5_handler(){
 	static uint8_t a=32;
@@ -411,14 +412,12 @@ void  __attribute__((interrupt ("machine"))) irq5_handler(){
 	if (++a>=128) a=32;
 }
 
-
 //UART2 RX
 void __attribute__((interrupt ("machine"))) irq6_handler()
 {
     udat2[wrix2++] = UART2DAT;
     wrix2 &= 31;
 }
-
 
 //UART2 TX
 void  __attribute__((interrupt ("machine"))) irq7_handler(){
@@ -428,10 +427,9 @@ void  __attribute__((interrupt ("machine"))) irq7_handler(){
 }
 
 
-
 // --------------------------------------------------------
 
-uint8_t spixfer (uint8_t d)
+uint8_t spi_transf (uint8_t d)
 {
 	SPIDAT=d;
 	while(SPISTA&1);
@@ -453,8 +451,7 @@ return SPI1DAT;
 
 static inline int abs_i(int x) { return (x < 0) ? -x : x; }
 
-//CHANGE CLARA MIGUEL
-// Main function
+// Funcion principal
 void main()
 {
 
@@ -474,6 +471,7 @@ void main()
     IRQEN = (1<<2);
 */	
 	
+	// Inicializacion de SPI y UARTs
 	SPICTRL=(8<<8)|8; 					// SPI control register 0 
 	SPI1CTRL=(8<<8)|8; 					// SPI control register 1 
 	SPISS = 0b11;
@@ -487,10 +485,12 @@ void main()
 
 	//_delay_ms(100);
 	
-	c = UARTDAT;		// Clear RX garbage
-	c = UART1DAT;		// Clear RX garbage
-	c = UART2DAT;		// Clear RX garbage
+	// Limpiar los FIFOs
+	c = UARTDAT;	
+	c = UART1DAT;	
+	c = UART2DAT;	
 	
+	// Asignar las funciones de interrupcion
 	IRQVECT0=(uint32_t)irq0_handler;	
 	IRQVECT1=(uint32_t)irq1_handler;
 	IRQVECT2=(uint32_t)irq2_handler;
@@ -503,14 +503,15 @@ void main()
 	// Habilitar IRQ de RX en UART0 (bit 2).
 	IRQEN = IRQ_UART0_RX;
 
-	// Activar TIMER para las funciones que lo usan como contador.
+	// Activar TIMER como contador libre para timeouts
 	MAX_COUNT = 0xFFFFFFFFu;
 
 	asm volatile ("ecall");
 	asm volatile ("ebreak");
 	_puts(menutxt);
-	_puts("Hola mundo\n");
+	//_puts("Hola mundo\n");
 	
+	// Bucle principal del menu
 	while (1)
 	{
 		_puts(menu);
@@ -527,10 +528,9 @@ void main()
 				_delay_ms(100);
 				break;
 	
-			// Transmisión del LoRa
+			// Transmisión del modulo LoRa
 			case 't':
 			if(SX1262_Init()){
-				//Tenemos los mismos valores que en la parte de SC
 				_printf("Modulo LoRa iniciado\n");
 				SX1262_configSetFrequency(868000000);
 				SX1262_configSetBandwidth(4);      		// 125KHz
@@ -543,7 +543,7 @@ void main()
 				}
 				break;
 	
-			// Recepción del LoRa
+			// Recepción del modulo LoRa
 			case 'r':
 				if (SX1262_Init())
 				{
@@ -572,31 +572,30 @@ void main()
 				break;
 	
 
-
-			// Envio continuo LoRa con sensores
+			// Envio continuo LoRa
 			case 'c':
-				lora_stream_send();
+				lora_continuo();
 				break;
+
 			// Sensores de humedad, temperatura y presion
 			case 's':
-				startBME680();
+				inicia_BME();
 	
-				temp_comp  = returnTemp();
-				press_comp = returnPressure();
-				hum_comp   = returnHUMIDITY(temp_comp);
+				temp_comp  = devuelve_temp();
+				press_comp = devuelve_pres();
+				hum_comp   = devuelve_hum(temp_comp);
 	
-				
-				_printf("DATOS OBTENIDOS DE PRESION, TEMPERATURA Y HUMEDAD \n");
+				_printf("MEDIDAS DE PRESION, HUMEDAD Y TEMPERATURA\n");
 				_printf("----------------------------------------------\n");
 				_printf("\n");
 	
-				_printf(" La temperatura es: ");
+				_printf(" La temperatura registrada es: ");
 				_printf("%02d.%d%c", temp_comp / 100, temp_comp % 100, 167);
 	
-				_printf("\n La presion es: ");
+				_printf("\n La presion registrada es: ");
 				_printf("%d Pascales", press_comp);
 	
-				_printf("\n La humedad es: ");
+				_printf("\n La humedad registrada es: ");
 				_printf("%02d.%03d%c", hum_comp / 1000, hum_comp % 1000, 37);
 	
 				_printf("\n\n");
@@ -605,44 +604,44 @@ void main()
 	
 			// Sensor de polvo GP2Y1010
 			case 'p': {
-				int raw = GP2Y1010_ReadRaw(MCP3004_CH1);
-				_printf("GP2Y1010 ADC raw (0-1023): %d \n", raw);
+				int raw = lee_GP2Y(MCP3004_CH1);
+				_printf("Lectura GP2Y1010 ADC (valores entre 0-1023): %d \n", raw);
 				break;
 			}
 			// Lectura ADC directa
 			case 'a': {
-				int adc0 = MCP3004_Read(MCP3004_CH0);
-				int adc1 = MCP3004_Read(MCP3004_CH1);
-				int adc2 = MCP3004_Read(MCP3004_CH2);
-				int adc3 = MCP3004_Read(MCP3004_CH3);
-				_printf("ADC MCP3004:\nCH0=%d\nCH1=%d\nCH2=%d\nCH3=%d\n", adc0, adc1, adc2, adc3);
+				int adc0 = lee_MCP(MCP3004_CH0);
+				int adc1 = lee_MCP(MCP3004_CH1);
+				int adc2 = lee_MCP(MCP3004_CH2);
+				int adc3 = lee_MCP(MCP3004_CH3);
+				_printf("Lectura ADC MCP3004:\nCH0=%d\nCH1=%d\nCH2=%d\nCH3=%d\n", adc0, adc1, adc2, adc3);
 				break;
 			}
 
 			// GPS
 			case 'g':
-				readGPS();
+				lee_GPS();
 				break;
 
-			// Debug completo
+			// Debug completo de todos los sensores
 			case 'd':
-				debug_sensors();
+				debug_sensores();
 				break;
 	
-			// Logo
+			// Logo del Grupo 1
 			case 'e':
 				_puts(logo);
 				break;
 	
-			
+			// Salir del menu
 			case 'q':
 				return;
 	
-			// Sensor de gases
+			// Medidas del sensor de gases
 			case 'f':
 			{
-				int co_ppm = MQ9_ReadCOppm(MCP3004_CH0);
-				int ch4_ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
+				int co_ppm = lee_MQ9_CO(MCP3004_CH0);
+				int ch4_ppm = lee_MQ9_CH4(MCP3004_CH0);
 				_printf("---- MQ9 ----\nCO: %d ppm\nCH4: %d ppm\n", co_ppm, ch4_ppm);
 				break;
 			}

@@ -1,106 +1,75 @@
+//////////////////////////////////////////////////////////////////
+//	TP1 - Sistemas electrónicos									//
+//	Grupo 1:												  	//
+//  Clara Ruiz de las Heras, Mario Medrano Paredes,				//
+//  Miguel Barrigón Gómez, Víctor Sánchez Valencia			    //
+//////////////////////////////////////////////////////////////////
+
 #include <stdint.h>
+#include "moduloBME680.h"
 
 // Funciones de comunicación SPI (declaraciones externas)
-extern uint8_t spixfer(uint8_t data);
-
-// Definiciones de registros BME680 (deberían estar en un header)
-#define RESET_BME       0xE0
-#define STATUS_BME      0x73
-#define CTRL_HUM        0x72
-#define CTRL_MEAS       0x74
-#define CTRL_GAS_1      0x71
-#define gas_wait0       0x64
-#define res_heat0       0x5A
-#define CS_BME680       0b10
-
+extern uint8_t spi_transf(uint8_t data);
 static int32_t bme680_t_fine = 0;
 
-/**
- * @brief Inicializa el módulo BME680
- * 
- * Configura los parámetros de oversampling para humedad, temperatura y presión,
- * así como los ajustes para las mediciones de gas.
- */
-void startBME680(void) {
+
+// Configura los parámetros de oversampling para humedad, temperatura y presión.
+void inicia_BME(void) {
     // Reset de los registros del módulo
-    writeBME680(0xB6, RESET_BME);
-    writeBME680(0x10, STATUS_BME);
+    escribe_BME(0xB6, BME_RESET);
+    escribe_BME(0x10, BME_ESTADO);
     
-    // 1. Set humidity oversampling to 1x by writing 0b001 to osrs_h
-    writeBME680(0x01, CTRL_HUM);
-    
-    // 2. Set temperature oversampling to 2x by writing 0b010 to osrs_t
-    // 3. Set pressure oversampling to 16x by writing 0b101 to osrs_p
-    writeBME680(0x54, CTRL_MEAS);
-    
-    // 4. Set gas_wait_0 to 0x59 to select 100 ms heat up duration
-    writeBME680(0x59, gas_wait0);
-    
-    // 5. Set the corresponding heater set-point by writing the target heater resistance to res_heat_0
-    writeBME680(0x00, res_heat0);
-    
-    // 6. Set nb_conv to 0x0 to select the previously defined heater settings
-    // 7. Set run_gas_l to 1 to enable gas measurements
-    writeBME680(0x10, CTRL_GAS_1);
-    
-    // 8. Set mode to 0b01 to trigger a single measurement
-    writeBME680(0x55, CTRL_MEAS);
+    // Configuracion de oversampling y gas heater
+    escribe_BME(0x01, CTRL_HUM);
+    escribe_BME(0x54, CTRL_MEAS);
+    escribe_BME(0x59, gas_wait0);
+    escribe_BME(0x00, res_heat0);
+    escribe_BME(0x10, CTRL_GAS_1);
+    escribe_BME(0x55, CTRL_MEAS);
     _delay_ms(100);
 }
 
-/**
- * @brief Escribe un dato en un registro del BME680
- * 
- * @param data Dato a escribir
- * @param dir Dirección del registro
- */
-void writeBME680(char data, char dir) {
-    SPISS = CS_BME680;              // Seleccionamos el chipSelect
-    spixfer(0x00 | dir);            // Pasamos dirección
-    spixfer(data);                  // Pasamos dato
-    SPISS = 0b11;                   // Devolvemos a 1 chip select
+// Escribe un dato en un registro del BME680
+void escribe_BME(char data, char dir) {
+    // Escritura SPI: direccion seguida del dato
+    SPISS = BME_CS;               
+    spi_transf(0x00 | dir);           
+    spi_transf(data);                 
+    SPISS = 0b11;                   
 }
 
-/**
- * @brief Lee un dato de un registro del BME680
- * 
- * @param dir Dirección del registro a leer
- * @return Valor leído del registro
- */
-char readBME680(char dir) {
+// Lee un dato de un registro del BME680
+char lee_BME(char dir) {
     unsigned char readDATA;
     
-    SPISS = CS_BME680;              // Seleccionamos chip select
-    spixfer(0x80 | dir);            // Lectura del SPI
-    readDATA = spixfer(0);          // Enviamos 0
+    // Lectura SPI: direccion con bit de lectura y un dummy para recibir
+    SPISS = BME_CS;              
+    spi_transf(0x80 | dir);           
+    readDATA = spi_transf(0);         
     SPISS = 0b11;
     
     return readDATA;
 }
 
-/**
- * @brief Calcula y retorna la temperatura compensada
- * 
- * @return Temperatura compensada en centígrados * 100
- */
-int returnTemp(void) {
+// Calcula y retorna la temperatura compensada
+int devuelve_temp(void) {
     int32_t par_t1, par_t2, par_t3, temp_adc;
     int32_t var1, var2, var3, t_fine, temp_comp;
     
-    // Entramos a la página 0 de los registros
-    writeBME680(0x00, STATUS_BME);
+    escribe_BME(0x00, BME_ESTADO);
     
-    par_t1 = (int32_t)((readBME680(0xEA) << 8) | readBME680(0xE9));
-    par_t2 = (int32_t)((readBME680(0x8B) << 8) | readBME680(0x8A));
-    par_t3 = (int32_t)readBME680(0x8C);
+    // Coeficientes de calibracion de temperatura
+    par_t1 = (int32_t)((lee_BME(0xEA) << 8) | lee_BME(0xE9));
+    par_t2 = (int32_t)((lee_BME(0x8B) << 8) | lee_BME(0x8A));
+    par_t3 = (int32_t)lee_BME(0x8C);
     
-    // Entramos a la página 1 de los registros
-    writeBME680(0x10, STATUS_BME);
+    escribe_BME(0x10, BME_ESTADO);
     
-    temp_adc = (int32_t)((readBME680(0x22) << 12) | 
-                         (readBME680(0x23) << 4) | 
-                         (readBME680(0x24) >> 4));
+    temp_adc = (int32_t)((lee_BME(0x22) << 12) | 
+                         (lee_BME(0x23) << 4) | 
+                         (lee_BME(0x24) >> 4));
     
+    // Compensacion segun datasheet (t_fine se reutiliza en presion)
     var1 = ((int32_t)temp_adc >> 3) - ((int32_t)par_t1 << 1);
     var2 = (var1 * (int32_t)par_t2) >> 11;
     var3 = ((((var1 >> 1) * (var1 >> 1)) >> 12) * ((int32_t)par_t3 << 4)) >> 14;
@@ -111,38 +80,33 @@ int returnTemp(void) {
     return temp_comp;
 }
 
-/**
- * @brief Calcula y retorna la presión compensada
- * 
- * @return Presión compensada en Pascales
- */
-int returnPressure(void) {
+// Calcula y retorna la presión compensada
+int devuelve_pres(void) {
     int32_t par_p1, par_p2, par_p3, par_p4, par_p5;
     int32_t par_p6, par_p7, par_p8, par_p9, par_p10;
     int32_t press_adc, press_comp;
     int32_t var1, var2, var3;
     int32_t t_fine = bme680_t_fine;
     
-    // Entramos a la página 0 de los registros
-    writeBME680(0x00, STATUS_BME);
+    escribe_BME(0x00, BME_ESTADO);
     
-    par_p1 = (int32_t)((readBME680(0x8F) << 8) | readBME680(0x8E));
-    par_p2 = (int32_t)((readBME680(0x91) << 8) | readBME680(0x90));
-    par_p3 = (int32_t)readBME680(0x92);
-    par_p4 = (int32_t)((readBME680(0x95) << 8) | readBME680(0x94));
-    par_p5 = (int32_t)((readBME680(0x97) << 8) | readBME680(0x96));
-    par_p6 = (int32_t)readBME680(0x99);
-    par_p7 = (int32_t)readBME680(0x98);
-    par_p8 = (int32_t)((readBME680(0x9D) << 8) | readBME680(0x9C));
-    par_p9 = (int32_t)((readBME680(0x9F) << 8) | readBME680(0x9E));
-    par_p10 = (int32_t)readBME680(0xA0);
+    // Coeficientes de calibracion de presion
+    par_p1 = (int32_t)((lee_BME(0x8F) << 8) | lee_BME(0x8E));
+    par_p2 = (int32_t)((lee_BME(0x91) << 8) | lee_BME(0x90));
+    par_p3 = (int32_t)lee_BME(0x92);
+    par_p4 = (int32_t)((lee_BME(0x95) << 8) | lee_BME(0x94));
+    par_p5 = (int32_t)((lee_BME(0x97) << 8) | lee_BME(0x96));
+    par_p6 = (int32_t)lee_BME(0x99);
+    par_p7 = (int32_t)lee_BME(0x98);
+    par_p8 = (int32_t)((lee_BME(0x9D) << 8) | lee_BME(0x9C));
+    par_p9 = (int32_t)((lee_BME(0x9F) << 8) | lee_BME(0x9E));
+    par_p10 = (int32_t)lee_BME(0xA0);
     
-    // Entramos a la página 1 de los registros
-    writeBME680(0x10, STATUS_BME);
+    escribe_BME(0x10, BME_ESTADO);
     
-    press_adc = (int32_t)((readBME680(0x1F) << 12) | 
-                          (readBME680(0x20) << 4) | 
-                          (readBME680(0x21) >> 4));
+    press_adc = (int32_t)((lee_BME(0x1F) << 12) | 
+                          (lee_BME(0x20) << 4) | 
+                          (lee_BME(0x21) >> 4));
     
     var1 = ((int32_t)t_fine >> 1) - 64000;
     var2 = ((((var1 >> 2) * (var1 >> 2)) >> 11) * (int32_t)par_p6) >> 2;
@@ -170,32 +134,26 @@ int returnPressure(void) {
     return press_comp;
 }
 
-/**
- * @brief Calcula y retorna la humedad compensada
- * 
- * @param temp_comp Temperatura compensada previamente calculada
- * @return Humedad relativa compensada (valor * 1000)
- */
-int returnHUMIDITY(int temp_comp) {
+// Calcula y retorna la humedad compensada
+int devuelve_hum(int temp_comp) {
     int32_t par_h1, par_h2, par_h3, par_h4, par_h5, par_h6, par_h7;
     int32_t hum_adc, temp_scaled, hum_comp;
     int32_t var1, var2, var3, var4, var5, var6;
     
-    // Entramos a la página 0 de los registros
-    writeBME680(0x00, STATUS_BME);
+    escribe_BME(0x00, BME_ESTADO);
     
-    par_h1 = (int32_t)((readBME680(0xE3) << 4) | (readBME680(0xE2) & 0b00001111));
-    par_h2 = (int32_t)((readBME680(0xE1) << 4) | (readBME680(0xE2) >> 4));
-    par_h3 = (int32_t)readBME680(0xE4);
-    par_h4 = (int32_t)readBME680(0xE5);
-    par_h5 = (int32_t)readBME680(0xE6);
-    par_h6 = (int32_t)readBME680(0xE7);
-    par_h7 = (int32_t)readBME680(0xE8);
+    // Coeficientes de calibracion de humedad
+    par_h1 = (int32_t)((lee_BME(0xE3) << 4) | (lee_BME(0xE2) & 0b00001111));
+    par_h2 = (int32_t)((lee_BME(0xE1) << 4) | (lee_BME(0xE2) >> 4));
+    par_h3 = (int32_t)lee_BME(0xE4);
+    par_h4 = (int32_t)lee_BME(0xE5);
+    par_h5 = (int32_t)lee_BME(0xE6);
+    par_h6 = (int32_t)lee_BME(0xE7);
+    par_h7 = (int32_t)lee_BME(0xE8);
     
-    // Entramos a la página 1 de los registros
-    writeBME680(0x10, STATUS_BME);
+    escribe_BME(0x10, BME_ESTADO);
     
-    hum_adc = (int32_t)((readBME680(0x25) << 8) | readBME680(0x26));
+    hum_adc = (int32_t)((lee_BME(0x25) << 8) | lee_BME(0x26));
     temp_scaled = (int32_t)temp_comp;
     
     var1 = (int32_t)hum_adc - (int32_t)((int32_t)par_h1 << 4) - 
