@@ -16,6 +16,15 @@
 7/11/2025 
 -[Actualizado] PCBs Finalizadas 
 -[Añadido] Ficheros Gerber actualizados
+21/11/2025
+-Se envía a fabricar la PCB3
+01/12/2025
+-Se recibe la PCB3
+05/12/2025
+-Se montan las PCB2 Y PCB3 
+12/12/2025
+-Se finaliza el montaje de las PCB2 Y PCB3
+
 
  
 

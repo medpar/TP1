@@ -1,5 +1,19 @@
 12/12/2025
 -[Añadido] Fichero Larva Modificado
--[Añadido] Fichero de tes
-16/0172026
+-[Añadido] Fichero de test
+19/12/2025
+-[actualizado] ficheros main y system para incorporar UARTs y SPI
+26/12/2025
+-[actualizado] ficheros main y system para incorporar UARTs y SPI
+16/01/2026
 - [Añadidos y actualizados] los ficheros main, system y los ficheros firmware
+19/01/2026
+-[actualizado] ficheros main con menú y ficheros de firmware para incorporar sensores.
+20/01/2026 
+-[actualizado] ficheros  definitivos de main y ficheros de firmware para incorporar sensores.
+30/01/2026
+-[actualizado] ficheros  definitivos de main con menú y ficheros de firmware para incorporar sensores.
+
+
+
+

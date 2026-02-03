@@ -19,21 +19,46 @@
 -[Añadido] Diagrama de Pert
 -[Actualizado] Documento final con diagramas gantt, pert y BOM 2
 -[Actualizado] Esquemático 3 por cambio de antena
+-[Añadido] Consumo eléctrico
 -[Actualizado] Control de cambios
 17/10/25
 -[Actualizado] Plan de Trabajo
 -[Actualizado] Documento final con diagramas BOM 0 y 1 
+-[Actualizado] Consumo eléctrico
+-[Añadido] Consumo Térmico
 -[Actualizado] Esquemático 0, 1, 2, 3 por corrección profesor
 31/10/25
 -[Actualizado] Plan de Trabajo
 -[Actualizado] Documento final
+-[Actualizado] Control de cambios
+-[Añadido] Presentación sobre el proyecto
 07/11/2025
 -[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
+-[Actualizado] Control de cambios
 21/11/2025
 -[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
+-[Actualizado] Control de cambios
 28/11/2025
 -[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
 05/12/2025
 -[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
+-[Actualizado] Control de cambios
 16/01/2025
 -[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
+23/01/2025
+-[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
+-[Actualizado] Control de cambios
+30/01/2025
+-[Actualizado] Plan de Trabajo
+-[Actualizado] Documento final
+06/02/2025
+-[Finalizado] Plan de Trabajo
+-[Finalizado] Documento final
+-[Actualizado] Control de cambios
+
