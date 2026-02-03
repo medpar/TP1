@@ -52,7 +52,7 @@ void lee_gas(void)
 void lee_CO(void)
 {
 	// Mide CO y configura el siguiente intervalo de espera
-	int read_CO = lee_MQ9_CO(MCP3004_CH0);
+	int read_CO = lee_MQ9_CO(MCP_0);
 
 	DISABLE_5V_1V4;
 	ENABLE_1V4;
@@ -69,7 +69,7 @@ void lee_CO(void)
 void lee_CH4(void)
 {
 	// Mide CH4 y finaliza la secuencia
-	int read_CH4 = lee_MQ9_CH4(MCP3004_CH0);
+	int read_CH4 = lee_MQ9_CH4(MCP_0);
 
 	DISABLE_5V_1V4;
 

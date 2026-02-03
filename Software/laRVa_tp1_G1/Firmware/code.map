@@ -1,9 +1,9 @@
 Archive member included to satisfy reference by file (symbol)
 
 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(muldi3.o)
-                              C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o (__mulsi3)
+                              C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o (__mulsi3)
 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
-                              C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o (__divsi3)
+                              C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o (__divsi3)
 
 Memory Configuration
 
@@ -14,14 +14,14 @@ RAM              0x0000000000000000 0x0000000000004000 xrw
 Linker script and memory map
 
 
-.text           0x0000000000000000     0x3bd6
+.text           0x0000000000000000     0x3c06
                 0x0000000000000000                . = ALIGN (0x4)
  *(.boot)
- .boot          0x0000000000000000        0x4 C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
+ .boot          0x0000000000000000        0x4 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
  *(.text)
- .text          0x0000000000000004       0x68 C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
+ .text          0x0000000000000004       0x68 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
                 0x0000000000000060                delay_loop
- .text          0x000000000000006c     0x2894 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+ .text          0x000000000000006c     0x2894 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
                 0x00000000000000b0                irq2_handler
                 0x0000000000000114                irq3_handler
                 0x0000000000000164                irq4_handler
@@ -36,33 +36,32 @@ Linker script and memory map
                 0x0000000000000c7c                memcpy
                 0x0000000000000ca0                _printf
                 0x0000000000000cdc                _sprintf
-                0x0000000000000d14                readGas
-                0x0000000000000d4c                GPS_ReadLatLon
-                0x0000000000000dec                GPS_ReadLatLonMicro
-                0x0000000000000ef0                readGPS
+                0x0000000000000d14                lee_gas
+                0x0000000000000d4c                GPS_lee_latlon
+                0x0000000000000dec                GPS_lee_latlon_micro
+                0x0000000000000ef0                lee_GPS
                 0x00000000000010c8                hascharUART0
                 0x00000000000010e4                hascharUART1
                 0x0000000000001100                hascharUART2
                 0x000000000000111c                getMEPC
                 0x0000000000001128                irq0_handler
-                0x0000000000001198                spixfer
-                0x00000000000011bc                writeBME680
-                0x0000000000001208                startBME680
-                0x0000000000001284                readBME680
-                0x00000000000012c4                returnTemp
-                0x00000000000013e0                returnPressure
-                0x00000000000016a8                returnHUMIDITY
-                0x00000000000018f4                MCP3004_DifferentialRead
-                0x000000000000190c                MCP3004_Read
-                0x0000000000001924                MQ9_ReadCOppm
-                0x0000000000001974                readCO
-                0x00000000000019fc                MQ9_ReadCH4ppm
-                0x0000000000001a44                readCH4
-                0x0000000000001a88                irq1_handler
-                0x0000000000001b2c                MCP3004_ReadMultiple
-                0x0000000000001b80                MCP3004_Read_Reg
-                0x0000000000001b84                GP2Y1010_ReadRaw
-                0x0000000000001bf0                readMCP3004
+                0x0000000000001198                spi_transf
+                0x00000000000011bc                escribe_BME
+                0x0000000000001208                inicia_BME
+                0x0000000000001284                lee_BME
+                0x00000000000012c4                devuelve_temp
+                0x00000000000013e0                devuelve_pres
+                0x00000000000016a8                devuelve_hum
+                0x00000000000018f4                lee_MCP
+                0x000000000000190c                lee_MQ9_CO
+                0x000000000000195c                lee_CO
+                0x00000000000019d8                lee_MQ9_CH4
+                0x0000000000001a20                lee_CH4
+                0x0000000000001a74                irq1_handler
+                0x0000000000001b18                lee_MCP_multiple
+                0x0000000000001b6c                lee_MCP_reg
+                0x0000000000001b70                lee_GP2Y
+                0x0000000000001bdc                lee_MCP_diferencial
                 0x0000000000001bf4                spi1xfer
                 0x0000000000001c18                SPI_TRANSFER_BUF
                 0x0000000000001c5c                SX1262_waitForRadioCommandCompletion
@@ -87,99 +86,99 @@ Linker script and memory map
                 0x0000000000002974                __umodsi3
                 0x00000000000029a8                __modsi3
  *(.text*)
- .text.startup  0x00000000000029d8      0x6a4 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+ .text.startup  0x00000000000029d8      0x6c4 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
                 0x00000000000029d8                main
  *(.rodata)
- .rodata        0x000000000000307c       0x6c C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+ .rodata        0x000000000000309c       0x6c C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
  *(.rodata*)
  .rodata.str1.4
-                0x00000000000030e8      0xaee C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
-                                        0xaf2 (size before relaxing)
+                0x0000000000003108      0xafe C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
+                                        0xb02 (size before relaxing)
  *(.srodata)
  *(.srodata*)
-                0x0000000000003bd6                _etext = .
-                0x0000000000003bd6                _sidata = _etext
+                0x0000000000003c06                _etext = .
+                0x0000000000003c06                _sidata = _etext
 
-.rela.dyn       0x0000000000003bd8        0x0
- .rela.text     0x0000000000003bd8        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
+.rela.dyn       0x0000000000003c08        0x0
+ .rela.text     0x0000000000003c08        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
 
-.data           0x0000000000003bd6        0x6
-                0x0000000000003bd8                . = ALIGN (0x4)
- *fill*         0x0000000000003bd6        0x2 
-                0x0000000000003bd6                _sdata_values = LOADADDR (.data)
-                0x0000000000003bd8                _sdata = .
-                0x0000000000003bd8                _ram_start = .
-                0x0000000000003bd8                . = ALIGN (0x4)
+.data           0x0000000000003c06        0x6
+                0x0000000000003c08                . = ALIGN (0x4)
+ *fill*         0x0000000000003c06        0x2 
+                0x0000000000003c06                _sdata_values = LOADADDR (.data)
+                0x0000000000003c08                _sdata = .
+                0x0000000000003c08                _ram_start = .
+                0x0000000000003c08                . = ALIGN (0x4)
  *(.data)
- .data          0x0000000000003bd8        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
- .data          0x0000000000003bd8        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
- .data          0x0000000000003bd8        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(muldi3.o)
- .data          0x0000000000003bd8        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+ .data          0x0000000000003c08        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
+ .data          0x0000000000003c08        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
+ .data          0x0000000000003c08        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(muldi3.o)
+ .data          0x0000000000003c08        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
  *(.data*)
  *(.sdata)
- .sdata         0x0000000000003bd8        0x3 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+ .sdata         0x0000000000003c08        0x3 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
  *(.sdata*)
-                0x0000000000003bdc                . = ALIGN (0x4)
- *fill*         0x0000000000003bdb        0x1 
-                0x0000000000003bdc                _edata = .
+                0x0000000000003c0c                . = ALIGN (0x4)
+ *fill*         0x0000000000003c0b        0x1 
+                0x0000000000003c0c                _edata = .
 
-.bss            0x0000000000003bdc      0x130
-                0x0000000000003bdc                . = ALIGN (0x4)
-                0x0000000000003bdc                _sbss = .
+.bss            0x0000000000003c0c      0x130
+                0x0000000000003c0c                . = ALIGN (0x4)
+                0x0000000000003c0c                _sbss = .
  *(.bss)
- .bss           0x0000000000003bdc        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
- .bss           0x0000000000003bdc      0x100 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
-                0x0000000000003bdc                udat0
-                0x0000000000003bfc                udat1
-                0x0000000000003c1c                udat2
-                0x0000000000003c3c                SX1262_spiBuff
- .bss           0x0000000000003cdc        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(muldi3.o)
- .bss           0x0000000000003cdc        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
+ .bss           0x0000000000003c0c        0x0 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
+ .bss           0x0000000000003c0c      0x100 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
+                0x0000000000003c0c                udat0
+                0x0000000000003c2c                udat1
+                0x0000000000003c4c                udat2
+                0x0000000000003c6c                SX1262_spiBuff
+ .bss           0x0000000000003d0c        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(muldi3.o)
+ .bss           0x0000000000003d0c        0x0 c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
  *(.bss*)
  *(.sbss)
- .sbss          0x0000000000003cdc       0x30 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
-                0x0000000000003cdc                iii
-                0x0000000000003ce0                SX1262_inReceiveMode
-                0x0000000000003ce4                SX1262_transmitTimeout
-                0x0000000000003ce8                SX1262_lowDataRateOptimize
-                0x0000000000003ce9                SX1262_spreadingFactor
-                0x0000000000003cea                SX1262_codingRate
-                0x0000000000003ceb                SX1262_bandwidth
-                0x0000000000003cec                SX1262_pllFrequency
-                0x0000000000003cf0                SX1262_signalRssi
-                0x0000000000003cf4                SX1262_snr
-                0x0000000000003cf8                SX1262_rssi
-                0x0000000000003d00                wrix2
-                0x0000000000003d01                rdix2
-                0x0000000000003d02                wrix1
-                0x0000000000003d03                rdix1
-                0x0000000000003d04                wrix0
-                0x0000000000003d05                rdix0
-                0x0000000000003d08                state
+ .sbss          0x0000000000003d0c       0x30 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
+                0x0000000000003d0c                iii
+                0x0000000000003d10                SX1262_inReceiveMode
+                0x0000000000003d14                SX1262_transmitTimeout
+                0x0000000000003d18                SX1262_lowDataRateOptimize
+                0x0000000000003d19                SX1262_spreadingFactor
+                0x0000000000003d1a                SX1262_codingRate
+                0x0000000000003d1b                SX1262_bandwidth
+                0x0000000000003d1c                SX1262_pllFrequency
+                0x0000000000003d20                SX1262_signalRssi
+                0x0000000000003d24                SX1262_snr
+                0x0000000000003d28                SX1262_rssi
+                0x0000000000003d30                wrix2
+                0x0000000000003d31                rdix2
+                0x0000000000003d32                wrix1
+                0x0000000000003d33                rdix1
+                0x0000000000003d34                wrix0
+                0x0000000000003d35                rdix0
+                0x0000000000003d38                estado
  *(.sbss*)
  *(COMMON)
-                0x0000000000003d0c                . = ALIGN (0x4)
-                0x0000000000003d0c                _ebss = .
+                0x0000000000003d3c                . = ALIGN (0x4)
+                0x0000000000003d3c                _ebss = .
 
-.heap           0x0000000000003d0c        0x0
-                0x0000000000003d0c                . = ALIGN (0x4)
-                0x0000000000003d0c                _heap_start = .
-LOAD C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
-LOAD C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+.heap           0x0000000000003d3c        0x0
+                0x0000000000003d3c                . = ALIGN (0x4)
+                0x0000000000003d3c                _heap_start = .
+LOAD C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
+LOAD C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
 LOAD c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a
 OUTPUT(code.elf elf32-littleriscv)
 
 .riscv.attributes
                 0x0000000000000000       0x20
  .riscv.attributes
-                0x0000000000000000       0x1a C:\Users\MARIO~1.DES\AppData\Local\Temp\cc5M2JcC.o
+                0x0000000000000000       0x1a C:\Users\MARIO~1.DES\AppData\Local\Temp\ccIX6eWa.o
  .riscv.attributes
-                0x000000000000001a       0x20 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+                0x000000000000001a       0x20 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
  .riscv.attributes
                 0x000000000000003a       0x1a c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(muldi3.o)
  .riscv.attributes
                 0x0000000000000054       0x1a c:/users/mario.desktop-viqgv0e/documents/tp1-g1/software/tools/xpack-risc_v/bin/../lib/gcc/riscv-none-elf/12.2.0/rv32e/ilp32e\libgcc.a(div.o)
 
 .comment        0x0000000000000000       0x33
- .comment       0x0000000000000000       0x33 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccATqXDf.o
+ .comment       0x0000000000000000       0x33 C:\Users\MARIO~1.DES\AppData\Local\Temp\ccrnP4iE.o
                                          0x34 (size before relaxing)

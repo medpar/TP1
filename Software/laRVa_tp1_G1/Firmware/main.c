@@ -189,6 +189,19 @@ void *memcpy(void *dst, const void *src, unsigned int n)
 extern int _printf(const char *format, ...);
 extern int _sprintf(char *out, const char *format, ...);
 
+static void split_temp_centi(int temp_centi, char *sign, int *int_part, int *frac_part)
+{
+	int abs_val = temp_centi;
+	if (temp_centi < 0) {
+		*sign = '-';
+		abs_val = -temp_centi;
+	} else {
+		*sign = ' ';
+	}
+	*int_part = abs_val / 100;
+	*frac_part = abs_val % 100;
+}
+
 // Funcion para debug de sensores
 static void debug_sensores(void)
 {
@@ -203,19 +216,23 @@ static void debug_sensores(void)
 	press_comp = devuelve_pres();
 	hum_comp   = devuelve_hum(temp_comp);
 
-	adc0 = lee_MCP(MCP3004_CH0);
-	adc1 = lee_MCP(MCP3004_CH1);
-	adc2 = lee_MCP(MCP3004_CH2);
-	adc3 = lee_MCP(MCP3004_CH3);
+	adc0 = lee_MCP(MCP_0);
+	adc1 = lee_MCP(MCP_1);
+	adc2 = lee_MCP(MCP_2);
+	adc3 = lee_MCP(MCP_3);
 
-	co_ppm  = lee_MQ9_CO(MCP3004_CH0);
-	ch4_ppm = lee_MQ9_CH4(MCP3004_CH0);
+	co_ppm  = lee_MQ9_CO(MCP_0);
+	ch4_ppm = lee_MQ9_CH4(MCP_0);
 
-	dust_raw = lee_GP2Y(MCP3004_CH1);
+	dust_raw = lee_GP2Y(MCP_1);
+
+	char temp_sign;
+	int temp_int, temp_frac;
+	split_temp_centi(temp_comp, &temp_sign, &temp_int, &temp_frac);
 
 	_printf("\n------ DEBUG SENSORES ------\n");
-	_printf("BME680 T=%02d.%02d C, P=%d Pa, H=%02d.%03d %%\n",
-	        temp_comp/100, temp_comp%100,
+	_printf("BME680 T=%c%d.%02d C, P=%d Pa, H=%02d.%03d %%\n",
+	        temp_sign, temp_int, temp_frac,
 	        press_comp,
 	        hum_comp/1000, hum_comp%1000);
 	_printf("ADC CH0=%d CH1=%d CH2=%d CH3=%d\n", adc0, adc1, adc2, adc3);
@@ -262,9 +279,12 @@ static void lora_continuo(void)
 		}
 
 		payload[0] = '\0';
+		char temp_sign;
+		int temp_int, temp_frac;
+		split_temp_centi(temp_comp, &temp_sign, &temp_int, &temp_frac);
 		int len = _sprintf(payload,
-		                   "	| Grupo 1, T= %2d.%02d, H= %2d.%03d %%, P=%d, LAT = %10d, LON = %10d",
-		                   temp_comp/100, temp_comp%100,
+		                   "	| Grupo 1, T= %c%d.%02d, H= %2d.%03d %%, P=%d, LAT = %10d, LON = %10d",
+		                   temp_sign, temp_int, temp_frac,
 		                   hum_comp/1000, hum_comp%1000,
 		                   press_comp,
 		                   lat_micro, lon_micro);
@@ -604,16 +624,16 @@ void main()
 	
 			// Sensor de polvo GP2Y1010
 			case 'p': {
-				int raw = lee_GP2Y(MCP3004_CH1);
+				int raw = lee_GP2Y(MCP_1);
 				_printf("Lectura GP2Y1010 ADC (valores entre 0-1023): %d \n", raw);
 				break;
 			}
 			// Lectura ADC directa
 			case 'a': {
-				int adc0 = lee_MCP(MCP3004_CH0);
-				int adc1 = lee_MCP(MCP3004_CH1);
-				int adc2 = lee_MCP(MCP3004_CH2);
-				int adc3 = lee_MCP(MCP3004_CH3);
+				int adc0 = lee_MCP(MCP_0);
+				int adc1 = lee_MCP(MCP_1);
+				int adc2 = lee_MCP(MCP_2);
+				int adc3 = lee_MCP(MCP_3);
 				_printf("Lectura ADC MCP3004:\nCH0=%d\nCH1=%d\nCH2=%d\nCH3=%d\n", adc0, adc1, adc2, adc3);
 				break;
 			}
@@ -640,8 +660,8 @@ void main()
 			// Medidas del sensor de gases
 			case 'f':
 			{
-				int co_ppm = lee_MQ9_CO(MCP3004_CH0);
-				int ch4_ppm = lee_MQ9_CH4(MCP3004_CH0);
+				int co_ppm = lee_MQ9_CO(MCP_0);
+				int ch4_ppm = lee_MQ9_CH4(MCP_0);
 				_printf("---- MQ9 ----\nCO: %d ppm\nCH4: %d ppm\n", co_ppm, ch4_ppm);
 				break;
 			}
