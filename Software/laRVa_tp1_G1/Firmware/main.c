@@ -236,7 +236,7 @@ static void lora_stream_send(void)
 	}
 	SX1262_configSetFrequency(868000000);
 	SX1262_configSetBandwidth(4);      	  //125 kHz
-	SX1262_configSetSpreadingFactor(12);  //SF12
+	SX1262_configSetSpreadingFactor(7);  //SF7
 
 	while (1) {
 		if (hascharUART0()) {
@@ -270,7 +270,7 @@ static void lora_stream_send(void)
 		_printf("rssi %4d, snr %4d ## %5u %s\n",
 		        SX1262_rssi, SX1262_snr, (unsigned long)msg_id, payload);
 		msg_id++;
-		_delay_ms(25000);
+		_delay_ms(1000);
 	}
 }
 
@@ -525,26 +525,25 @@ void main()
 			case '2':
 				IRQEN ^= 3;   // Toggle IRQ enable for UART TX
 				_delay_ms(100);
-				break; 
+				break;
 	
 			// Transmisión del LoRa
 			case 't':
-				if(SX1262_Init()){
-					//Tenemos los mismos valores que en la parte de SC
-					_printf("Modulo LoRa iniciado\n: RX Lora Params: SF%d, CR4%d\n");
-					SX1262_configSetFrequency(868000000);
-					SX1262_configSetCodingRate(3); 			//CR_4_7
-					SX1262_configSetBandwidth(4);      		// 125KHz
-					SX1262_configSetSpreadingFactor(12); 	//SF12
-					//SX1262_transmit((uint8_t *)"Grupo 1", (int)(sizeof("Grupo 1") - 1));
-				}
+			if(SX1262_Init()){
+				//Tenemos los mismos valores que en la parte de SC
+				_printf("Modulo LoRa iniciado\n");
+				SX1262_configSetFrequency(868000000);
+				SX1262_configSetBandwidth(4);      		// 125KHz
+				SX1262_configSetSpreadingFactor(7); 	//SF7
+				SX1262_transmit((uint8_t *)"Grupo 1", (int)(sizeof("Grupo 1") - 1));
+			}
 				else
 				{
 					_printf("Error al iniciar el LoRa\n");
 				}
 				break;
 	
-			//Recepción del LoRa
+			// Recepción del LoRa
 			case 'r':
 				if (SX1262_Init())
 				{
@@ -571,12 +570,13 @@ void main()
 					_printf("Error al iniciar el LoRa\n");
 				}
 				break;
+	
 
 
 			// Envio continuo LoRa con sensores
 			case 'c':
-			lora_stream_send();
-			break;
+				lora_stream_send();
+				break;
 			// Sensores de humedad, temperatura y presion
 			case 's':
 				startBME680();
@@ -629,7 +629,7 @@ void main()
 				debug_sensors();
 				break;
 	
-			//Logo
+			// Logo
 			case 'e':
 				_puts(logo);
 				break;
@@ -645,7 +645,7 @@ void main()
 				int ch4_ppm = MQ9_ReadCH4ppm(MCP3004_CH0);
 				_printf("---- MQ9 ----\nCO: %d ppm\nCH4: %d ppm\n", co_ppm, ch4_ppm);
 				break;
-			}*/
+			}
 	
 			default:
 				continue;	

@@ -21,8 +21,8 @@ int      SX1262_signalRssi = 0;
 uint8_t  SX1262_spiBuff[32];   //Buffer for sending SPI commands to radio
 uint32_t SX1262_pllFrequency;
 uint8_t  SX1262_bandwidth;
-uint8_t  SX1262_codingRate = 7;
-uint8_t  SX1262_spreadingFactor = 12;
+uint8_t  SX1262_codingRate;
+uint8_t  SX1262_spreadingFactor;
 uint8_t  SX1262_lowDataRateOptimize;
 uint32_t SX1262_transmitTimeout;
 uint8_t  SX1262_inReceiveMode = false;
@@ -551,10 +551,15 @@ void SX1262_updateModulationParameters()
 uint8_t SX1262_configSetPreset(int preset)
 {
   if (preset == PRESET_DEFAULT) {
-
+      /*
+    SX1262_bandwidth = 5;            //250khz
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 7;      //SF7
+    SX1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
+    */
     SX1262_bandwidth = 4;            //125khz Match LilyGo LoRa
-    SX1262_codingRate = 3;           //CR_4_7
-    SX1262_spreadingFactor = 12;      //SF12
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 7;      //SF7
     SX1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
     SX1262_updateModulationParameters();
     return true;
@@ -562,7 +567,7 @@ uint8_t SX1262_configSetPreset(int preset)
 
   if (preset == PRESET_LONGRANGE) {
     SX1262_bandwidth = 4;            //125khz
-    SX1262_codingRate = 3;           //CR_4_7
+    SX1262_codingRate = 1;           //CR_4_5
     SX1262_spreadingFactor = 12;     //SF12
     SX1262_lowDataRateOptimize = 1;  //Optimize for low data rate (SF12 only)
     SX1262_updateModulationParameters();
@@ -571,8 +576,8 @@ uint8_t SX1262_configSetPreset(int preset)
 
   if (preset == PRESET_FAST) {
     SX1262_bandwidth = 6;            //500khz
-    SX1262_codingRate = 3;           //CR_4_7
-    SX1262_spreadingFactor = 12;      //SF5
+    SX1262_codingRate = 1;           //CR_4_5
+    SX1262_spreadingFactor = 5;      //SF5
     SX1262_lowDataRateOptimize = 0;  //Don't optimize (used for SF12 only)
     SX1262_updateModulationParameters();
     return true;
