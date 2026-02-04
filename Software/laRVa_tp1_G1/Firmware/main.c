@@ -231,7 +231,7 @@ static void debug_sensores(void)
 	split_temp_centi(temp_comp, &temp_sign, &temp_int, &temp_frac);
 
 	_printf("\n------ DEBUG SENSORES ------\n");
-	_printf("BME680 T=%c%d.%02d C, P=%d Pa, H=%02d.%03d %%\n",
+	_printf("BME680 T=%c%d.%02dC, P=%d Pa, H=%02d.%03d %%\n",
 	        temp_sign, temp_int, temp_frac,
 	        press_comp,
 	        hum_comp/1000, hum_comp%1000);
@@ -283,7 +283,7 @@ static void lora_continuo(void)
 		int temp_int, temp_frac;
 		split_temp_centi(temp_comp, &temp_sign, &temp_int, &temp_frac);
 		int len = _sprintf(payload,
-		                   "	| Grupo 1, T= %c%d.%02d, H= %2d.%03d %%, P=%d, LAT = %10d, LON = %10d",
+		                   "|Grupo 1,T=%c%d.%02dC,H=%2d.%03d%%,P=%d Pa,LAT= %10d,LON= %10d",
 		                   temp_sign, temp_int, temp_frac,
 		                   hum_comp/1000, hum_comp%1000,
 		                   press_comp,
@@ -332,7 +332,7 @@ const static char *menu="\n"
 "--------------------------------------------------\n"  
 "\n\n";
 
-const static char *menutxt="TP1 Grupo1 - laRVa IoT logger\n";
+const static char *menutxt="        TP1 Grupo1 - laRVa IoT logger\n";
 
 const static char *logo="\n\n"
 "       | | | |                       ( | )  \n"
@@ -528,8 +528,8 @@ void main()
 
 	asm volatile ("ecall");
 	asm volatile ("ebreak");
+	_puts(logo);
 	_puts(menutxt);
-	//_puts("Hola mundo\n");
 	
 	// Bucle principal del menu
 	while (1)
@@ -610,7 +610,7 @@ void main()
 				_printf("\n");
 	
 				_printf(" La temperatura registrada es: ");
-				_printf("%02d.%d%c", temp_comp / 100, temp_comp % 100, 167);
+				_printf("%02d.%d%cC", temp_comp / 100, temp_comp % 100, 167);
 	
 				_printf("\n La presion registrada es: ");
 				_printf("%d Pascales", press_comp);
