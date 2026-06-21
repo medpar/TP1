@@ -22,7 +22,7 @@ In practice, the system can:
 - Validate the RF path with a PCB-integrated antenna and external antenna options.
 
 <p align="center">
-  <img src="docs/assets/readme/field-test-setup.png" alt="Datalogger field test setup" width="420">
+  <img src="docs/assets/readme/assembled-datalogger-prototype.png" alt="Assembled datalogger prototype during field validation" width="420">
   <img src="docs/assets/readme/lora-telemetry-terminal.png" alt="LoRa telemetry terminal output" width="420">
 </p>
 
