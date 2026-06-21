@@ -1,4 +1,4 @@
-# LoRa Environmental Datalogger
+# LoRa Environmental IoT Datalogger
 
 An end-to-end IoT datalogger prototype that measures environmental data, processes it on an FPGA-based RISC-V system, and sends telemetry through a LoRa radio link at 868 MHz.
 
